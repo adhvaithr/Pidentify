@@ -23,6 +23,7 @@ int main(int argc, char **argv)
 {
     try
     {
+
         //
         // In this example we demonstrate exponential fitting by
         //
@@ -52,17 +53,7 @@ int main(int argc, char **argv)
         ae_int_t maxits = 0;
         lsfitstate state;
         lsfitreport rep;
-
-        //
-        // Fitting without weights
-        //
-        lsfitcreatefg(x, y, c, state);
-        lsfitsetcond(state, epsx, maxits);
-        alglib::lsfitfit(state, function_cx_1_func, function_cx_1_grad);
-        lsfitresults(state, c, rep);
-        printf("%d\n", int(rep.terminationtype)); // EXPECTED: 2
-        printf("%s\n", c.tostring(1).c_str()); // EXPECTED: [1.5]
-
+        
         //
         // Fitting with weights
         // (you can change weights and see how it changes result)
