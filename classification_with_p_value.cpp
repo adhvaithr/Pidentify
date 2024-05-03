@@ -7,45 +7,44 @@
 // a.Logistic function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    // This callback calculates f(c,x) = 1 / (1 + exp(-c0 * x0^2))
-    // where x is a position on the X-axis and c is an adjustable parameter.
-    func = 1.0 / (1.0 + exp(-c[0] * pow(x[0], 2)));
+    func = 1.0 / (1.0 + exp(-x[0]));
+}
+void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr) {
+    // (1+ e^x/(e^x+1)^2)/2
+    grad[0] = (1 + exp(x[0]) / ((exp(x[0]) + 1.0) * (exp(x[0]) + 1.0)))/2;
+}
+
+// b.Hyperbolic tangent
+void Hyperbolic_tangent_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
+{
+    // This calculates f(c,x) = (exp(x) - exp(-x))/((exp(x) + exp(-x)))
+    func = (exp(x[0]) - exp(-x[0]))/(exp(x[0]) + exp(-x[0]));
 }
 
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
-    // This callback calculates f(c,x) = 1 / (1 + exp(-c0 * x0^2)) and gradient G={df/dc[i]}
-    // where x is a position on the X-axis and c is an adjustable parameter.
-    // IMPORTANT: the gradient is calculated with respect to C, not to X.
-    double sigma = 1.0 / (1.0 + exp(-c[0] * pow(x[0], 2)));
-    func = sigma;
-    grad[0] = sigma * (1.0 - sigma) * (-pow(x[0], 2));
+    // This calculates f(c,x) = 1 - ((exp(x) - exp(-x))^2/((exp(x) + exp(-x))^2)/2
+   // x[0] is for x
+    grad[0] = 1 - (exp(x[0]) - exp(-x[0])) * (exp(x[0]) - exp(-x[0]))/((exp(x[0]) + exp(-x[0])) * (exp(x[0]) + exp(-x[0])))/2;
 }
 
-// b.Arctangent function
+// c.Arctangent function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    // This callback calculates f(c,x) = 2 * atan(tanh(c0 * x0 / 2))
-    // where x is a position on the X-axis and c is an adjustable parameter.
-    func = 2.0 * atan(tanh(c[0] * x[0] / 2.0));
+    func = atan(x[0]);
 }
 
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
-    // This callback calculates f(c,x) = 2 * atan(tanh(c0 * x0 / 2)) and gradient G={df/dc[i]}
-    // where x is a position on the X-axis and c is an adjustable parameter.
-    // IMPORTANT: the gradient is calculated with respect to C, not to X.
-    double gudermannian = 2.0 * atan(tanh(c[0] * x[0] / 2.0));
-    func = gudermannian;
-    grad[0] = 1.0 - pow(tanh(c[0] * x[0] / 2.0), 2);
+    grad[0] = (1.0 + 1/(x[0]^2 + 1))/2;
 }
 
-// c.Gudermannian function
+// d.Gudermannian function //Todo
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
     // This callback calculates f(c,x) = 2 * atan(tanh(c0 * x0 / 2))
     // where x is a position on the X-axis and c is an adjustable parameter.
-    func = 2.0 * atanh(tanh(c[0] * x[0] / 2.0));
+    func = 2.0 * atanta(tanh(c[0] * x[0] / 2.0));
 }
 
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
@@ -58,7 +57,7 @@ void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &
     grad[0] = (1.0 - pow(tanh(c[0] * x[0] / 2.0), 2)) * x[0] / (1.0 - pow(x[0], 2) / 4.0);
 }
 
-// d.Error function
+// e.Error function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
     // This callback calculates f(c,x) = 1 - erf(c0 * x0)
