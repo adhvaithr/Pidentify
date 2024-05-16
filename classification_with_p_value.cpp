@@ -7,11 +7,12 @@
 // a.Logistic function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    func = 1.0 / (1.0 + exp(-x[0]));
+    func = (1.0 / (1.0 + exp(-x[0])) + 1)/2;
 }
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr) {
-    // (1+ e^x/(e^x+1)^2)/2
-    grad[0] = (1 + exp(x[0]) / ((exp(x[0]) + 1.0) * (exp(x[0]) + 1.0)))/2;
+    // ((x - a) * e^(a + x))/(2(e^a*c + e^c*x)^2)
+    grad[0] = ((x-c[1]) * exp(c[0] * (c[1] + x))) / (2 * (((exp(c[0]) * c[1]) + (exp(c[0]) * c[1]))^2));
+    grad[1] = -((c[0] * e^(c[0] * (a + x))) / (2(e^(c[1]*c[0]) + e^(c[0]*x))^2));
 }
 
 // b.Hyperbolic tangent
