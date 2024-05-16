@@ -11,8 +11,8 @@ void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &
 }
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr) {
     // ((x - a) * e^(a + x))/(2(e^a*c + e^c*x)^2)
-    grad[0] = ((x-c[1]) * exp(c[0] * (c[1] + x))) / (2 * (((exp(c[0]) * c[1]) + (exp(c[0]) * c[1]))^2));
-    grad[1] = -((c[0] * e^(c[0] * (a + x))) / (2(e^(c[1]*c[0]) + e^(c[0]*x))^2));
+    grad[0] = ((x[0]-c[1]) * exp(c[0] * (c[1] + x[0]))) / (2 * (((exp(c[0]) * c[1]) + (exp(c[0]) * c[1]))*((exp(c[0]) * c[1]) + (exp(c[0]) * c[1]))));
+    grad[1] = -((c[0] * exp(c[0] * (c[1] + x[0]))) / (2 * (exp(c[1]*c[0]) + exp(c[0]*x[0])) * (exp(c[1]*c[0]) + exp(c[0]*x[0]))));
 }
 
 // b.Hyperbolic tangent
