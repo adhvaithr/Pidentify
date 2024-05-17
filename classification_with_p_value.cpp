@@ -7,37 +7,39 @@
 // a.Logistic function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    func = (1.0 / (1.0 + exp(-x[0])) + 1)/2;
+    // This calculates 1/(1 + e^-(c * (x - a))
+    func = 1.0 / (1.0 + exp(-c[0] * (x[0]-c[1])));
 }
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr) {
-    // ((x - a) * e^(a + x))/(2(e^a*c + e^c*x)^2)
-    grad[0] = ((x[0]-c[1]) * exp(c[0] * (c[1] + x[0]))) / (2 * (((exp(c[0]) * c[1]) + (exp(c[0]) * c[1]))*((exp(c[0]) * c[1]) + (exp(c[0]) * c[1]))));
-    grad[1] = -((c[0] * exp(c[0] * (c[1] + x[0]))) / (2 * (exp(c[1]*c[0]) + exp(c[0]*x[0])) * (exp(c[1]*c[0]) + exp(c[0]*x[0]))));
+    grad[0] = ((x[0]-c[1]) * exp(c[0] * (c[1] - x[0]))) / (exp(c[0] * (c[1] - x[0])) + 1) * (exp(c[0] * (c[1] - x[0])) + 1);
+    grad[1] = -(c[0] * exp(c[0] * (c[1] - x[0])) / (exp(c[0] * (c[1] - x[0])) + 1) * (exp(c[0] * (c[1] - x[0]))));
 }
 
 // b.Hyperbolic tangent
 void Hyperbolic_tangent_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    // This calculates f(c,x) = (exp(x) - exp(-x))/((exp(x) + exp(-x)))
-    func = (exp(x[0]) - exp(-x[0]))/(exp(x[0]) + exp(-x[0]));
+    // This calculates (exp(c*(x-a)) - exp(-c*(x-a)))/((exp(c*(x-a)) + exp(-c*(x-a))))
+    // x = c[0] * (x[0] - c[1])
+    func = ((exp(c[0] * (x[0] - c[1])) - exp(-c[0] * (x[0] - c[1])))/(exp(c[0] * (x[0] - c[1])) + exp(-c[0] * (x[0] - c[1]))) + 1) / 2;
 }
 
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
-    // This calculates f(c,x) = 1 - ((exp(x) - exp(-x))^2/((exp(x) + exp(-x))^2)/2
-   // x[0] is for x
-    grad[0] = 1 - (exp(x[0]) - exp(-x[0])) * (exp(x[0]) - exp(-x[0]))/((exp(x[0]) + exp(-x[0])) * (exp(x[0]) + exp(-x[0])))/2;
+    grad[0] = (2 * (x[0] - c[1]) * exp(2 * c[0] * (x[0] - c[1]))) / ((exp(2 * c[0] * (x[0] - c[1])) + 1) *  (exp(2 * c[0] * (x[0] - c[1])) + 1));
+    grad[1] = -((2 * c[0] * exp(2 * c[0] * (x[0] - a[0]))) / ((exp(2 * c[0] * (x[0] - a[0])) + 1) * (exp(2 * c[0] * (x[0] - a[0])) + 1)));
 }
 
 // c.Arctangent function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    func = atan(x[0]);
+    // this calculates (arctan(c[0] * (x[0] - c[1]) + 1 ) / 2;
+    func = (atan(c[0] * (x[0] - c[1])) + 1) / 2;
 }
 
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
-    grad[0] = (1.0 + 1/(x[0]^2 + 1))/2;
+    grad[0] = (x[0] - c[1]) / (2 * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1));
+    grad[1] = c[0] / (2 * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1));
 }
 
 // d.Gudermannian function //Todo
@@ -58,7 +60,7 @@ void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &
     grad[0] = (1.0 - pow(tanh(c[0] * x[0] / 2.0), 2)) * x[0] / (1.0 - pow(x[0], 2) / 4.0);
 }
 
-// e.Error function
+// e.Error function //Todo
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
     // This callback calculates f(c,x) = 1 - erf(c0 * x0)
@@ -76,3 +78,15 @@ void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &
     grad[0] = -2.0 / sqrt(M_PI) * x[0] * exp(-c[0] * c[0] * x[0] * x[0]);
 }
 
+// f. A simple algebraic function
+void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
+{
+    // This calculate c(x-a)/(sqrt(1 + (c(x-a)^2));
+    func = ((c[0] * (x[0] - c[1]) / sqrt(1 + x[0] * x[0])) + 1) / 2;
+}
+
+void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
+{
+    grad[0] = (x[0] - c[1]) / (2 * (sqrt((c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1))));
+    grad[1] = c[0] / (2 * (sqrt((c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1))));
+}
