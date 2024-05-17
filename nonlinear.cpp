@@ -5,25 +5,22 @@
 #include "interpolation.h"
 
 using namespace alglib;
-void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr) 
+void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    // this callback calculates f(c,x)=exp(-c0*sqr(x0))
-    // where x is a position on X-axis and c is adjustable parameter
-    func = exp(-c[0]*pow(x[0],2));
+    func = 1.0 / (1.0 + exp(-c[0] * x[0] - c[1]));
 }
-void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr) 
-{
-    // this callback calculates f(c,x)=exp(-c0*sqr(x0)) and gradient G={df/dc[i]}
-    // where x is a position on X-axis and c is adjustable parameter.
-    // IMPORTANT: gradient is calculated with respect to C, not to X
-    func = exp(-c[0]*pow(x[0],2));
-    grad[0] = -pow(x[0],2)*func;
+void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr) {
+    // (1+ e^x/(e^x+1)^2)/2
+    grad[0] = (1 + exp(c[0] * x[0] + c[1]) / ((exp(c[0] * x[0] + c[1]) + 1.0) * (exp(c[0] * x[0] + c[1]) + 1.0)))/2;
 }
+
 int main(int argc, char **argv)
 {
     try
     {
-
+        // kx + b
+        // ((kx + b) +1) / 2
+        //   (k (cx + a) + b + 1) / 2
         //
         // In this example we demonstrate exponential fitting by
         //
@@ -46,9 +43,9 @@ int main(int argc, char **argv)
         //            section,  and  comments  on  lsfitfit()  function  for  more
         //            information.
         //
-        real_2d_array x = "[[-1],[-0.8],[-0.6],[-0.4],[-0.2],[0],[0.2],[0.4],[0.6],[0.8],[1.0]]";
-        real_1d_array y = "[0.223130, 0.382893, 0.582748, 0.786628, 0.941765, 1.000000, 0.941765, 0.786628, 0.582748, 0.382893, 0.223130]";
-        real_1d_array c = "[0.3]";
+        real_2d_array x = "[[0],[0.11],[0.21],[0.34],[0.42],[0.53],[0.55],[0.56],[0.58],[0.59],[0.90]]";
+        real_1d_array y = "[0, 0.05, 0.1, 0.15, 0.20, 0.23, 0.44, 0.45, 0.5, 0.53, 0.75]";
+        real_1d_array c = "[0.1, 0.2]";
         double epsx = 0.000001;
         ae_int_t maxits = 0;
         lsfitstate state;
@@ -65,6 +62,7 @@ int main(int argc, char **argv)
         lsfitresults(state, c, rep);
         printf("%d\n", int(rep.terminationtype)); // EXPECTED: 2
         printf("%s\n", c.tostring(1).c_str()); // EXPECTED: [1.5]
+        printf("%g\n", rep.wrmserror);
     }
     catch(alglib::ap_error alglib_exception)
     {
