@@ -1,8 +1,16 @@
 # Pidentify
 
-Pidentify is an API which aims at classifying with P-value. This project will make classifier predict whether a test point belongs to any trained catagory.
+Pidentify is an API designed to compute the variance between input data and training datasets. 
 
-If not, classifier will say "none of above".
+It will involve introducing a "p-value" component, which will contribute to determining the p-value for each class, enabling the evaluation of input data deviation from the trained datasets. Our objective is to equip researchers with a robust tool that can improve classifier accuracy and streamline validation procedures.
+
+Only .csv files and numerical data are supported in this API, and please also make sure imported datasets have unified formats (For example. ID is the class in first column).
+
+## How it works
+
+API will make classifier predict whether a test point belongs to any trained catagory.
+
+If given input can be categorized into training sets, prediction works correctly. If not, make classifier stop make predictions (by saying "none of above").
 
 ## Nonlinear square fitting
 
