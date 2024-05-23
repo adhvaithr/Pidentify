@@ -4,6 +4,10 @@
 #include <math.h>
 #include <cmath>
 
+double sech(double x) {
+    return 1.0 / std::cosh(x);
+}
+
 // a.Logistic function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
@@ -42,22 +46,16 @@ void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &
     grad[1] = c[0] / (2 * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1));
 }
 
-// d.Gudermannian function //Todo
+// d.Gudermannian function
 void function_cx_1_func(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
 {
-    // This callback calculates f(c,x) = 2 * atan(tanh(c0 * x0 / 2))
-    // where x is a position on the X-axis and c is an adjustable parameter.
-    func = 2.0 * atanta(tanh(c[0] * x[0] / 2.0));
+    func = (2* atan(tanh(c[0] * (x[0] - c[1])/ 2))) + 1) / 2;
 }
 
 void function_cx_1_grad(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
-    // This callback calculates f(c,x) = 2 * atanh(tanh(c0 * x0 / 2)) and gradient G={df/dc[i]}
-    // where x is a position on the X-axis and c is an adjustable parameter.
-    // IMPORTANT: the gradient is calculated with respect to C, not to X.
-    double gudermannian = 2.0 * atanh(tanh(c[0] * x[0] / 2.0));
-    func = gudermannian;
-    grad[0] = (1.0 - pow(tanh(c[0] * x[0] / 2.0), 2)) * x[0] / (1.0 - pow(x[0], 2) / 4.0);
+    grad[0] = ((x[0] - c[1]) * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1])))/ (2 * ((tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1));
+    grad[1] = -(c[0] * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1])) / (2 * (tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1)));
 }
 
 // e.Error function //Todo
