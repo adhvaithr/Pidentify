@@ -6,6 +6,12 @@
 
 using namespace alglib;
 
+struct FitResult {
+    real_1d_array c;
+    std::string functionName;
+    double wrmsError;
+};
+
 // helper function secant
 double sech(double x) {
     return 1.0 / std::cosh(x);
@@ -26,10 +32,10 @@ void logistic_fd(const real_1d_array &c, const real_1d_array &x, double &func, r
     grad[1] = c[0] * exp(c[0] * (c[1] - x[0])) / (exp(c[0] * (c[1] - x[0])) + 1) * (exp(c[0] * (c[1] - x[0])));
 }
 
-// hyperbolic tangent
+// hyperbolic tangent function
 double hyperbolic_tangent(double k, double alpha, double x)
 {
-    return ((exp(k * (x - alpha)) - exp(-k * (x - alpha)))/(exp(k * (x - alpha)) + exp(-k * (x - alpha))) + 1) / 2;
+    return ((exp(k * (x - alpha)) - exp(-k * (x - alpha))) / (exp(k * (x - alpha)) + exp(-k * (x - alpha))) + 1) / 2;
 }
 
 void hyperbolic_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
@@ -40,7 +46,7 @@ void hyperbolic_f(const real_1d_array &c, const real_1d_array &x, double &func, 
 void hyperbolic_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
     func = 1 - hyperbolic_tangent(c[0], c[1], x[0]);
-    grad[0] = - (2 * (x[0] - c[1]) * exp(2 * c[0] * (x[0] - c[1]))) / ((exp(2 * c[0] * (x[0] - c[1])) + 1) *  (exp(2 * c[0] * (x[0] - c[1])) + 1));
+    grad[0] = - (2 * (x[0] - c[1]) * exp(2 * c[0] * (x[0] - c[1]))) / ((exp(2 * c[0] * (x[0] - c[1])) + 1) * (exp(2 * c[0] * (x[0] - c[1])) + 1));
     grad[1] = (2 * c[0] * exp(2 * c[0] * (x[0] - c[1]))) / ((exp(2 * c[0] * (x[0] - c[1])) + 1) * (exp(2 * c[0] * (x[0] - c[1])) + 1));
 }
 
@@ -76,7 +82,7 @@ void gudermannian_f(const real_1d_array &c, const real_1d_array &x, double &func
 void gudermannian_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
     func = 1 - gudermannian(c[0], c[1], x[0]);
-    grad[0] = -((x[0] - c[1]) * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1])))/ (2 * ((tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1)));
+    grad[0] = -((x[0] - c[1]) * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1]))) / (2 * ((tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1)));
     grad[1] = c[0] * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1])) / (2 * (tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1));
 }
 
@@ -100,11 +106,12 @@ void algebraic_fd(const real_1d_array &c, const real_1d_array &x, double &func, 
 }
 
 
-int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_values)
+int curveFitting(std::vector<double> sorted_distances, std::vector<double> y_values)
 {
     alglib::real_2d_array x;
     alglib::real_1d_array y;
     alglib::real_1d_array w;
+    std::vector<FitResult> results;
 
     x.setlength(sorted_distances.size(), 1);
     y.setlength(y_values.size());
@@ -126,7 +133,7 @@ int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_va
 
     try
     {
-        real_1d_array c = "[0.367, 0.45]";
+        real_1d_array c = "[0.367, 0.45]"; // initial values for c & a in c(x-a)
         double epsx = 0;
         ae_int_t maxits = 0;
         lsfitstate state;
@@ -137,9 +144,8 @@ int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_va
         lsfitsetcond(state, epsx, maxits);
         alglib::lsfitfit(state, logistic_f, logistic_fd);
         lsfitresults(state, c, rep);
+        results.push_back({c, "Logistic fucntion", rep.wrmserror});
         //printf("%d\n", int(rep.terminationtype));  // status code
-        printf("%s\n", c.tostring(1).c_str()); // best fit values for c & a in c(x-a)
-        printf("%f\n", rep.wrmserror); // residual
 
         // print out the fitting procedure
         /*for (int i = 0; i < y.size(); i++){
@@ -151,9 +157,8 @@ int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_va
         lsfitsetcond(state, epsx, maxits);
         alglib::lsfitfit(state, hyperbolic_f, hyperbolic_fd);
         lsfitresults(state, c, rep);
+        results.push_back({c, "hyperbolic tangent fucntion", rep.wrmserror});
         //printf("%d\n", int(rep.terminationtype));
-        printf("%s\n", c.tostring(1).c_str());
-        printf("%f\n", rep.wrmserror);
 
         // print out the fitting procedure
         /*for (int i = 0; i < y.size(); i++){
@@ -165,9 +170,8 @@ int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_va
         lsfitsetcond(state, epsx, maxits);
         alglib::lsfitfit(state, arctangent_f, arctangent_fd);
         lsfitresults(state, c, rep);
+        results.push_back({c, "arctangent function", rep.wrmserror});
         //printf("%d\n", int(rep.terminationtype));
-        printf("%s\n", c.tostring(1).c_str());
-        printf("%f\n", rep.wrmserror);
 
         // print out the fitting procedure
         /*for (int i = 0; i < y.size(); i++){
@@ -179,9 +183,8 @@ int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_va
         lsfitsetcond(state, epsx, maxits);
         alglib::lsfitfit(state, gudermannian_f, gudermannian_fd);
         lsfitresults(state, c, rep);
+        results.push_back({c, "gudermannian function", rep.wrmserror});
         //printf("%d\n", int(rep.terminationtype));
-        printf("%s\n", c.tostring(1).c_str());
-        printf("%f\n", rep.wrmserror);
 
         // print out the fitting procedure
         /*for (int i = 0; i < y.size(); i++){
@@ -193,14 +196,32 @@ int curve_fitting(std::vector<double> sorted_distances, std::vector<double> y_va
         lsfitsetcond(state, epsx, maxits);
         alglib::lsfitfit(state, algebraic_f, algebraic_fd);
         lsfitresults(state, c, rep);
+        results.push_back({c, "simple algebraic function", rep.wrmserror});
         //printf("%d\n", int(rep.terminationtype));
-        printf("%s\n", c.tostring(1).c_str());
-        printf("%f\n", rep.wrmserror);
 
         // print out the fitting procedure
         /*for (int i = 0; i < y.size(); i++){
             printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - algebraic(c[0], c[1], x[i][0]));
         }*/
+
+        // print out all results
+        for (const auto& result : results) {
+            std::cout << "Function: " << result.functionName << std::endl;
+            std::cout << "c & a in c(x-a): " << result.c.tostring(1).c_str() << std::endl;
+            std::cout << "Residual: " << result.wrmsError << std::endl;
+        }
+
+        // print out the best result
+        FitResult bestFit = results[0];
+        for (const auto& result : results) {
+            if (result.wrmsError < bestFit.wrmsError) {
+                bestFit = result;
+            }
+        }
+
+        std::cout << "Best fit function: " << bestFit.functionName << std::endl;
+        std::cout << "c & a in c(x-a): " << bestFit.c.tostring(1).c_str() << std::endl;
+        std::cout << "Residual: " << bestFit.wrmsError << std::endl;
     
     } catch(alglib::ap_error alglib_exception){
         printf("ALGLIB exception with message '%s'\n", alglib_exception.msg.c_str());

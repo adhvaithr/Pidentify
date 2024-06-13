@@ -1,16 +1,15 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <sstream>
-#include <fstream>
 #include <cmath>
 #include <limits>
-#include <assert.h>
+#include <cassert>
 #include <unordered_map>
 #include <algorithm>
-#include "iris.h"
 
-void normalizeFeatures(std::vector<Iris>& dataset) {
+#include "classMember.h"
+
+void normalizeFeatures(std::vector<ClassMember>& dataset) {
     if (dataset.empty()) {
         std::cerr << "Dataset is empty!" << std::endl;
         return;
@@ -68,13 +67,13 @@ double euclideanDistance(const std::vector<double>& a, const std::vector<double>
 }
 
 
-std::vector<double> computeNearestNeighborDistances(const std::vector<Iris>& dataset) {
-    std::unordered_map<std::string, std::vector<Iris> > classMap;
+std::vector<double> computeNearestNeighborDistances(const std::vector<ClassMember>& dataset) {
+    std::unordered_map<std::string, std::vector<ClassMember> > classMap;
     std::vector<double> distances;
     
     // Group dataset by species
     for (const auto& obj : dataset) {
-        classMap[obj.species].push_back(obj);
+        classMap[obj.name].push_back(obj);
     }
     
     // Compute nearest neighbor distances for each class
@@ -101,7 +100,7 @@ std::vector<double> computeNearestNeighborDistances(const std::vector<Iris>& dat
     return distances;
 }
 
-std::vector<double> process(std::vector<Iris> dataset){
+std::vector<double> process(std::vector<ClassMember> dataset){
 
     // normalize features
     normalizeFeatures(dataset);
