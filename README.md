@@ -18,7 +18,9 @@ Apply nonlinear square fitting to find a best curve (sigmoid function) for ECDF 
 
 Use "alglib" library: https://www.alglib.net/interpolation/leastsquares.php#header4
 
-Command for compiling nonlinear.ccp: g++ -I alglib/src -o nonlinear nonlinear.cpp alglib.a
+Command for compiling nonlinear.ccp: g++ --std=c++11 -I alglib/src -o exe main.cpp process.cpp fit.cpp alglib.a
+
+Execute the compiled file: ./exe
 
 function_cx_1_func contains origianl sigmoid functions. function_cx_1_grad contains derivitives of sigmoid functions in terms of array c (parameters/values to get a best fit)
 
