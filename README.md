@@ -34,7 +34,7 @@ We assume there are 2 parameters (c & a in c(x-a) in function) in each sigmoid f
 
 5 sigmoid functions are supported right now. They are: Logistic function, hyperbolic tangent function, arctangent function, gudermannian function, and simple algebraic function.
 
-"function name_f" (e.g. logistic_f) stands for the original function. "function name_fd" stands for the derivative of the corresponding original function in terms of a & c.
+"function name_f" (e.g. logistic_f) stands for the original function. "function name_fd" (e.g. logistic_fd) stands for the derivative of the corresponding original function in terms of a & c.
 
 rep.terminationtype: a status code returned
 
