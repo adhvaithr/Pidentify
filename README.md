@@ -20,15 +20,15 @@ After executing the compiled file, it will print out all best fit values along w
 
 ## Data processing (process.cpp)
 
-"process.cpp" will normalize all features, compute the nearest neighbor distances by using KNN (k = 1 here).
+"process.cpp" will normalize all features, and compute the nearest neighbor distances by using KNN (k = 1 here).
 
-And then, it will sort all distances in ascending order and eliminate duplicated results.
+And then, it will sort all distances in an ascending order and eliminate duplicated results.
 
 ## Nonlinear square fitting (fit.cpp)
 
 "fit.cpp" is based on "alglib" library: https://www.alglib.net/interpolation/leastsquares.php#header4
 
-Apply nonlinear square fitting to find a best value and function for ECDF points in each class.
+Apply nonlinear square fitting to find a best value for sigmoid functions in each class.
 
 We assume there are 2 parameters in each sigmoid funcitons needs to be tailored for ECDF points. c & a in c(x-a) in function. In "fit.cpp", real_1d_array c has the initial values for c & a. (c[0] stands for c, c[1] stands for a).
 
