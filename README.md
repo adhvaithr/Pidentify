@@ -30,7 +30,7 @@ And then, it will sort all distances in an ascending order and eliminate duplica
 
 Apply nonlinear square fitting to find a best value for sigmoid functions in each class.
 
-We assume there are 2 parameters in each sigmoid funcitons needs to be tailored for ECDF points. c & a in c(x-a) in function. In "fit.cpp", real_1d_array c has the initial values for c & a. (c[0] stands for c, c[1] stands for a).
+We assume there are 2 parameters in each sigmoid funciton needs to be tailored for ECDF points. c & a in c(x-a) in function. In "fit.cpp", real_1d_array c has the initial values for c & a. (c[0] stands for c, c[1] stands for a).
 
 5 sigmoid functions are supported right now. Logistic function, hyperbolic tangent function, arctangent function, gudermannian function, and simple algebraic function).
 
