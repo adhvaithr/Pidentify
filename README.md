@@ -16,7 +16,7 @@ After executing the compiled file, it will print out all best fit values along w
 
 ## Read data from a csv file (main.cpp)
 
-"main.cpp" will turn csv file into "std::vector<ClassMember> dataset" for future use.
+"main.cpp" will turn a csv file into "std::vector<ClassMember> dataset" for future use.
 
 ## Data processing (process.cpp)
 
