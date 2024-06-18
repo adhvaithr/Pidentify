@@ -32,7 +32,7 @@ Apply nonlinear square fitting to find a best value for sigmoid functions in eac
 
 We assume there are 2 parameters (c & a in c(x-a) in function) in each sigmoid funciton need to be tailored for ECDF points. In "fit.cpp", real_1d_array c holds the initial values for c & a. (c[0] stands for c, c[1] stands for a).
 
-5 sigmoid functions are supported right now. Logistic function, hyperbolic tangent function, arctangent function, gudermannian function, and simple algebraic function).
+5 sigmoid functions are supported right now. They are: Logistic function, hyperbolic tangent function, arctangent function, gudermannian function, and simple algebraic function.
 
 "function name_f" (e.g. logistic_f) stands for the original function. "function name_fd" stands for the derivative of the corresponding original function in terms of a & c.
 
