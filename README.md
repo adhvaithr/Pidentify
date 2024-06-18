@@ -14,7 +14,7 @@ Execute the compiled file: ./exe
 
 After executing the compiled file, it will print out all best fit values along with residuals for each sigmoid functions and the best fit value among all functions.
 
-## Store data in csv file in the data structure (main.cpp)
+## Read data from csv file (main.cpp)
 
 "main.cpp" will turn csv file into "std::vector<ClassMember> dataset" for future use.
 
