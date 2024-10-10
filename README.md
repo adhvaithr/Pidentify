@@ -14,27 +14,27 @@ Execute the compiled file: ./exe
 
 After executing the compiled file, it will print out all best fit values along with residuals for each sigmoid functions and the best fit value among all functions.
 
-## Store data in csv file in the data structure (main.cpp)
+## Read data from a csv file (main.cpp)
 
-"main.cpp" will turn csv file into "std::vector<ClassMember> dataset" for future use.
+"main.cpp" will turn a csv file into "std::vector<ClassMember> dataset" for future use.
 
 ## Data processing (process.cpp)
 
-"process.cpp" will normalize all features, compute the nearest neighbor distances by using KNN (k = 1 here).
+"process.cpp" will normalize all features, and compute the nearest neighbor distances by using KNN (k = 1 here).
 
-And then, it will sort all distances in ascending order and eliminate duplicated results.
+And then, it will sort all distances in an ascending order and eliminate duplicated results.
 
 ## Nonlinear square fitting (fit.cpp)
 
 "fit.cpp" is based on "alglib" library: https://www.alglib.net/interpolation/leastsquares.php#header4
 
-Apply nonlinear square fitting to find a best value and function for ECDF points in each class.
+Apply nonlinear square fitting to find a best value for sigmoid functions in each class.
 
-We assume there are 2 parameters in each sigmoid funcitons needs to be tailored for ECDF points. c & a in c(x-a) in function. In "fit.cpp", real_1d_array c has the initial values for c & a. (c[0] stands for c, c[1] stands for a).
+We assume there are 2 parameters (c & a in c(x-a) in function) in each sigmoid funciton need to be tailored for ECDF points. In "fit.cpp", real_1d_array c holds the initial values for c & a. (c[0] stands for c, c[1] stands for a).
 
-5 sigmoid functions are supported right now. Logistic function, hyperbolic tangent function, arctangent function, gudermannian function, and simple algebraic function).
+5 sigmoid functions are supported right now. They are: Logistic function, hyperbolic tangent function, arctangent function, gudermannian function, and simple algebraic function.
 
-"function name_f" (e.g. logistic_f) stands for the original function. "function name_fd" stands for the derivative of the corresponding original function in terms of a & c.
+"function name_f" (e.g. logistic_f) stands for the original function. "function name_fd" (e.g. logistic_fd) stands for the derivative of the corresponding original function in terms of a & c.
 
 rep.terminationtype: a status code returned
 
