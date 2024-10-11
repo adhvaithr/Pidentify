@@ -10,14 +10,14 @@ import os
 
 @dataclass
 class DataFile:
-    "Object for each file containing data"
+    """Object for each file containing data"""
     file_path: str
     file_type: str
     class_col_index: int
     delimiter: str = None
 
 def load_file_objs():
-    """Prompts user for file paths where data is stored"""
+    """Prompts user for file paths where data is stored, and returns an array with DataFile objects"""
     file_objs = []
     while True:
         file_path = input("Enter file path to data file (press enter to exit): ").strip()     
@@ -42,15 +42,14 @@ def load_file_objs():
     return file_objs
 
 def get_file_extension(file_path: str):
-    """Returns file extension"""
-    # TODO: add error handling
+    """Returns file extension of said file, taking the file path as an argument"""
     try:
         return os.path.splitext(file_path)[-1]
     except ValueError:
         print("Error: Function argument must be a file path. Retry again.")
 
 def read_file(file_obj: DataFile):
-    """Reads file and returns Dataframe"""
+    """Reads file depending on the file_type of the object and returns DataFrame with data once done reading file"""
     try:
         if file_obj.file_type in [".csv", ".data", ".txt"]:
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
@@ -61,24 +60,25 @@ def read_file(file_obj: DataFile):
     
 
 def process_files(file_objs: list[DataFile]):
-    """Loads and concatenates all csv files in file_paths and returns dataframe"""
-    # TODO: what if files in file_paths are diff format???
-    # TODO: clean up datasets with points like N/A
+    """Loads and concatenates all csv files in file_paths, cleaning dataset by removing empty and duplicate rows, and returns combined dataframe"""
+    # TODO: clean up datasets that have points with wrong format
     loaded_dfs = []
     for file_obj in file_objs:
         df = read_file(file_obj)
+        df.dropna(inplace = True)
+        df.drop_duplicates(inplace = True)
         df = move_class_to_last_column(df, file_obj.class_col_index)
         loaded_dfs.append(df)
     return pd.concat(loaded_dfs, ignore_index=True)
 
 def move_class_to_last_column(df, class_col_ind: int):
-    """Swaps class column at column class_col_ind with the last column in the df Dataframe"""
+    """Swaps class column at index class_col_ind with the last column in the df Dataframe"""
     columns = list(df.columns)
     columns[class_col_ind], columns[-1] = columns[-1], columns[class_col_ind]
     return df[columns]
 
 def get_output_file_name():
-    """Get desired name for output csv file"""
+    """Get desired name from user for output CSV file"""
     name = input("Enter desired name for output file: ").strip()
     while not name:
         name = input("Enter desired name for output file: ").strip()
