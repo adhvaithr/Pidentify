@@ -86,7 +86,7 @@ def get_output_file_name():
     return name
 
 def create_output_file(df, file_name):
-    """Creates a csv file called filename containing df dataframe"""
+    """Creates a csv file called filename containing df dataframe """
     df.to_csv(file_name)
 
 def main():
