@@ -4,9 +4,9 @@ import os
 
 
 # local file paths to test with
-# ./test_datasets/iris/iris.data
-# ./test_datasets/wine+quality/winequality-red.csv'
-# ./test_datasets/wine+quality/winequality-white.csv'
+# test\ datasets/wine\ quality/winequality-red.csv
+# "test datasets"/"wine quality"/winequality-white.csv
+
 
 @dataclass
 class DataFile:
@@ -14,7 +14,7 @@ class DataFile:
     file_path: str
     file_type: str
     class_col_index: int
-    # delimiter: str   TODO: delimiter field??
+    delimiter: str = None
 
 def load_file_objs():
     """Prompts user for file paths where data is stored"""
@@ -49,7 +49,6 @@ def get_file_extension(file_path: str):
 
 def read_file(file_obj: DataFile):
     """Reads file and returns Dataframe"""
-    # file_type = get_file_extension(file_path)
     try:
         if file_obj.file_type in [".csv", ".data"]:
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
@@ -78,14 +77,20 @@ def move_class_to_last_column(df, class_col_ind: int):
 
 def get_output_file_name():
     """Get desired name for output csv file"""
-    name = input("Enter desired name for output file: ")
+    name = input("Enter desired name for output file: ").strip()
+    while not name:
+        name = input("Enter desired name for output file: ").strip()
+    # TODO: check if valid file name. Currently only making sure that some value is given
     return name
 
+def create_output_file(df, file_name):
+    df.to_csv(file_name)
+
 def main():
-    # print(get_file_extension("./test_datasets/wine+quality/winequality-red.csv"))
     file_objs = load_file_objs()
     output_file_name = get_output_file_name()
     df = process_files(file_objs)
+    create_output_file(df, output_file_name)
     print(df)
 
 if __name__ == "__main__":
