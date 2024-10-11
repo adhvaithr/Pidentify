@@ -44,24 +44,26 @@ def load_file_objs():
 def get_file_extension(file_path: str):
     """Returns file extension"""
     # TODO: add error handling
-    extension = os.path.splitext(file_path)[-1]
-    return extension
+    try:
+        return os.path.splitext(file_path)[-1]
+    except ValueError:
+        print("Error: Function argument must be a file path. Retry again.")
 
 def read_file(file_obj: DataFile):
     """Reads file and returns Dataframe"""
     try:
-        if file_obj.file_type in [".csv", ".data"]:
+        if file_obj.file_type in [".csv", ".data", ".txt"]:
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
         elif file_obj.file_type in [".xlsx"]:
             return pd.read_excel(file_obj.file_path, sep=None, engine='python')
     except pd.errors.ParserError as e:
-        # TODO: decide on error functionality when reading files. Currently returning empty dataframe, ignoring data in file that caused error
-        return pd.DataFrame()
+        return e
     
 
 def process_files(file_objs: list[DataFile]):
     """Loads and concatenates all csv files in file_paths and returns dataframe"""
     # TODO: what if files in file_paths are diff format???
+    # TODO: clean up datasets with points like N/A
     loaded_dfs = []
     for file_obj in file_objs:
         df = read_file(file_obj)
