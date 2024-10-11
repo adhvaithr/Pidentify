@@ -6,6 +6,7 @@ import os
 # local file paths to test with
 # test\ datasets/wine\ quality/winequality-red.csv
 # "test datasets"/"wine quality"/winequality-white.csv
+# local-winequality-red.csv
 
 
 @dataclass
@@ -21,7 +22,6 @@ def load_file_objs():
     file_objs = []
     while True:
         file_path = input("Enter file path to data file (press enter to exit): ").strip()     
-         
         if not file_path:
             break     
 
@@ -60,8 +60,9 @@ def read_file(file_obj: DataFile):
     
 
 def process_files(file_objs: list[DataFile]):
-    """Loads and concatenates all csv files in file_paths, cleaning dataset by removing empty and duplicate rows, and returns combined dataframe"""
-    # TODO: clean up datasets that have points with wrong format
+    """Loads and concatenates all csv files in file_paths and returns dataframe"""
+    # TODO: what if files in file_paths are diff format???
+    # TODO: clean up datasets with points like N/A
     loaded_dfs = []
     for file_obj in file_objs:
         df = read_file(file_obj)
