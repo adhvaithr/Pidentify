@@ -55,6 +55,8 @@ def read_file(file_obj: DataFile):
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
         elif file_obj.file_type in [".xlsx"]:
             return pd.read_excel(file_obj.file_path, sep=None, engine='python')
+        elif file_obj.file_type in [".txt", ".arff"]:
+            return pd.read_table(file_obj.file_path, sep=None, engine='python')
     except pd.errors.ParserError as e:
         # TODO: decide on error functionality when reading files. Currently returning empty dataframe, ignoring data in file that caused error
         return pd.DataFrame()
