@@ -18,11 +18,10 @@ class DataFile:
     delimiter: str = None
 
 def load_file_objs():
-    """Prompts user for file paths where data is stored, and returns an list with DataFile objects"""
+    """Prompts user for file paths where data is stored, and returns an array with DataFile objects"""
     file_objs = []
-
     while True:
-        file_path = input("Enter file path to data file (press enter to exit): ").strip()
+        file_path = input("Enter file path to data file (press enter to exit): ").strip()     
 
         # Break out of while loop if empty input  
         if not file_path:
@@ -50,12 +49,7 @@ def load_file_objs():
     return file_objs
 
 def get_file_extension(file_path: str):
-<<<<<<< Updated upstream
     """Returns file extension of said file, taking the file path as an argument"""
-=======
-    """Returns file extension"""
-    # TODO: add error handling
->>>>>>> Stashed changes
     try:
         return os.path.splitext(file_path)[-1]
     except ValueError:
@@ -74,33 +68,35 @@ def read_file(file_obj: DataFile):
 
 def process_files(file_objs: list[DataFile]):
     """Loads and concatenates all csv files in file_paths and returns dataframe"""
-    # TODO: what if files in file_paths are diff format???
-    # TODO: clean up datasets with points like N/A
+    # TODO: clean up datasets with incorrectly formatted points
     loaded_dfs = []
-    for file_obj in file_objs:
-        df = read_file(file_obj)
+    for file_obj in file_objs: # looping through file_objs list created in load_file_objs
+        df = read_file(file_obj) 
         df.dropna(inplace = True)
-        df.drop_duplicates(inplace = True)
-        df = move_class_to_last_column(df, file_obj.class_col_index)
-        loaded_dfs.append(df)
-    return pd.concat(loaded_dfs, ignore_index=True)
+        df.drop_duplicates(inplace = True) 
+        df = move_class_to_last_column(df, file_obj.class_col_index) 
+        loaded_dfs.append(df) # reads file first, then cleans and sorts columns in dataframe, then adds dataframe to list
+    return pd.concat(loaded_dfs, ignore_index=True) # combines dataframes in list into one 
 
 def move_class_to_last_column(df, class_col_ind: int):
     """Swaps class column at index class_col_ind with the last column in the df Dataframe"""
     columns = list(df.columns)
-    columns[class_col_ind], columns[-1] = columns[-1], columns[class_col_ind]
+    columns[class_col_ind], columns[-1] = columns[-1], columns[class_col_ind] # moves the class column to the last column in the dataframe
     return df[columns]
 
 def get_output_file_name():
     """Get desired name from user for output CSV file"""
+    # TODO: find another way to check for special characters when creating name for CSV
+    special_characters = ["~", "!", "@", "#", "$", "%", "^", "&", "*" ,"(", ")", "`", ";", ":", "<", ">", "?", ".", ",", "[", "]", "{", "}", "'", "\"", "|"]
     name = input("Enter desired name for output file: ").strip()
-    while not name:
+    while not (name or (special_characters in name)):
         name = input("Enter desired name for output file: ").strip()
-    # TODO: check if valid file name. Currently only making sure that some value is given
+    if (" " in name):
+        name = name.replace(" ", "_")
     return name
 
 def create_output_file(df, file_name):
-    """Creates a csv file called filename containing df dataframe """
+    """Creates a csv file called filename containing combined dataframe"""
     df.to_csv(file_name)
 
 def main():
