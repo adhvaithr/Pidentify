@@ -18,24 +18,32 @@ class DataFile:
     delimiter: str = None
 
 def load_file_objs():
-    """Prompts user for file paths where data is stored, and returns an array with DataFile objects"""
+    """Prompts user for file paths where data is stored, and returns an list with DataFile objects"""
     file_objs = []
+
     while True:
-        file_path = input("Enter file path to data file (press enter to exit): ").strip()     
+        file_path = input("Enter file path to data file (press enter to exit): ").strip()
+
+        # Break out of while loop if empty input  
         if not file_path:
             break     
 
+        # Discard file path input if no existing file found
         if not os.path.exists(file_path):
             print("Error: File not found.")
             continue
         try:
+            # Prompt user for index of class column
             class_col = int(input("Enter column index (starting at 0) of class column: ").strip())
             # TODO: check column in valid range
         except ValueError:
             print("Error: Class column must be integer. File not loaded")
             continue
-
+        
+        # Get file type
         extension = get_file_extension(file_path)
+
+        # Create DataFile object and add to file_objs list
         file_obj = DataFile(file_path = file_path, file_type=extension, class_col_index = class_col)
         file_objs.append(file_obj)
 
