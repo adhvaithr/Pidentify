@@ -50,7 +50,12 @@ def load_file_objs():
     return file_objs
 
 def get_file_extension(file_path: str):
+<<<<<<< Updated upstream
     """Returns file extension of said file, taking the file path as an argument"""
+=======
+    """Returns file extension"""
+    # TODO: add error handling
+>>>>>>> Stashed changes
     try:
         return os.path.splitext(file_path)[-1]
     except ValueError:
