@@ -99,7 +99,7 @@ def get_output_file_name():
 
 def create_output_file(df, file_name):
     """Creates a csv file called filename containing combined dataframe"""
-    df.to_csv(file_name)
+    df.to_csv(file_name, index=False)
 
 def main():
     file_objs = load_file_objs()
