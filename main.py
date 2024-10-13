@@ -4,7 +4,7 @@ import os
 
 
 # local file paths to test with
-# test\ datasets/wine\ quality/winequality-red.csv
+# test/ datasets/wine\ quality/winequality-red.csv
 # "test datasets"/"wine quality"/winequality-white.csv
 # local-winequality-red.csv
 
