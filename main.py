@@ -86,12 +86,23 @@ def move_class_to_last_column(df, class_col_ind: int):
     columns[class_col_ind], columns[-1] = columns[-1], columns[class_col_ind] # moves the class column to the last column in the dataframe
     return df[columns]
 
+def valid_file_name(desired_name: str):
+    """Check that the characters within desired name do not include special characters with ascii"""
+    valid_characters = [32, 95] + list(range(48, 58)) + list(range(65, 91)) + list(range(97, 123))
+    for char in desired_name:
+        ascii_char = ord(char)
+        if ascii_char not in valid_charactesr:
+            return False
+    return True
+
 def get_output_file_name():
     """Get desired name from user for output CSV file"""
-    # TODO: find another way to check for special characters when creating name for CSV
-    special_characters = ["~", "!", "@", "#", "$", "%", "^", "&", "*" ,"(", ")", "`", ";", ":", "<", ">", "?", ".", ",", "[", "]", "{", "}", "'", "\"", "|"]
     name = input("Enter desired name for output file: ").strip()
-    while not (name or (special_characters in name)):
+    while not (name and valid_file_name(name)):
+        if not name:
+            print("File name can't be empty or contain only whitespace.")
+        else:
+            print("File name can't contain special characters besides space and underscore.")
         name = input("Enter desired name for output file: ").strip()
     if (" " in name):
         name = name.replace(" ", "_")
