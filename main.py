@@ -91,7 +91,7 @@ def valid_file_name(desired_name: str):
     valid_characters = [32, 95] + list(range(48, 58)) + list(range(65, 91)) + list(range(97, 123))
     for char in desired_name:
         ascii_char = ord(char)
-        if ascii_char not in valid_charactesr:
+        if ascii_char not in valid_characters:
             return False
     return True
 
