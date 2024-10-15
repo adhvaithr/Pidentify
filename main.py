@@ -58,10 +58,10 @@ def get_file_extension(file_path: str):
 def read_file(file_obj: DataFile):
     """Reads file depending on the file_type of the object and returns DataFrame with data once done reading file"""
     try:
-        if file_obj.file_type in [".csv", ".data", ".txt"]:
+        if file_obj.file_type in [".csv", ".data"]:
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
         elif file_obj.file_type in [".xlsx"]:
-            return pd.read_excel(file_obj.file_path, sep=None, engine='python')
+            return pd.read_excel(file_obj.file_path)
         elif file_obj.file_type in [".txt", ".arff"]:
             return pd.read_table(file_obj.file_path, sep=None, engine='python')
     except pd.errors.ParserError as e:
@@ -75,7 +75,7 @@ def process_files(file_objs: list[DataFile]):
     for file_obj in file_objs: # looping through file_objs list created in load_file_objs
         df = read_file(file_obj) 
         df.dropna(inplace = True)
-        df.drop_duplicates(inplace = True) 
+        # df.drop_duplicates(inplace = True) 
         df = move_class_to_last_column(df, file_obj.class_col_index) 
         loaded_dfs.append(df) # reads file first, then cleans and sorts columns in dataframe, then adds dataframe to list
     return pd.concat(loaded_dfs, ignore_index=True) # combines dataframes in list into one 
