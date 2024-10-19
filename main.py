@@ -137,7 +137,7 @@ def main():
     
     file_objs = process_arguments()
     df = process_files(file_objs)
-
+    df.to_csv(sys.stdout, index=False)
     # create_output_file(df, output_file_name)
 
 
