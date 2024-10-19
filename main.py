@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import pandas as pd
 import os
-
+import sys
 
 # local file paths to test with
 # test/ datasets/wine\ quality/winequality-red.csv
@@ -15,11 +15,30 @@ class DataFile:
     file_path: str
     file_type: str
     class_col_index: int
+    is_training: bool
+    ignore_cols: list[int]
+    include_header: bool
     delimiter: str = None
+
+
+def process_arguments():
+    """Processes command line arguments into list of Datafile objects"""
+    args = sys.argv
+    include_header = bool(int(args[1]))
+    class_col = int(args[2])
+    ignore_cols = list(map(int, args[3].split(',')))
+    is_training = bool(int(args[4]))
+    input_files = args[5:]
+
+    extensions = list(map(get_file_extension, input_files))
+
+    datafile_list = [DataFile(file_path=input_files[i], file_type=extensions[i],class_col_index=class_col, ignore_cols=ignore_cols, is_training=is_training, include_header=include_header) for i in range(len(input_files))]
+    return datafile_list
 
 def load_file_objs():
     """Prompts user for file paths where data is stored, and returns an array with DataFile objects"""
     file_objs = []
+    print(process_arguments())
     while True:
         file_path = input("Enter file path to data file (press enter to exit): ").strip()     
 
@@ -75,7 +94,7 @@ def process_files(file_objs: list[DataFile]):
     for file_obj in file_objs: # looping through file_objs list created in load_file_objs
         df = read_file(file_obj) 
         df.dropna(inplace = True)
-        # df.drop_duplicates(inplace = True) 
+        df.drop_duplicates(inplace = True) 
         df = move_class_to_last_column(df, file_obj.class_col_index) 
         loaded_dfs.append(df) # reads file first, then cleans and sorts columns in dataframe, then adds dataframe to list
     return pd.concat(loaded_dfs, ignore_index=True) # combines dataframes in list into one 
@@ -113,10 +132,13 @@ def create_output_file(df, file_name):
     df.to_csv(file_name, index=False)
 
 def main():
-    file_objs = load_file_objs()
-    output_file_name = get_output_file_name()
+    # file_objs = load_file_objs()
+    # output_file_name = get_output_file_name()
+    
+    file_objs = process_arguments()
     df = process_files(file_objs)
-    create_output_file(df, output_file_name)
+
+    # create_output_file(df, output_file_name)
 
 
 if __name__ == "__main__":
