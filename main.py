@@ -77,16 +77,38 @@ def get_file_extension(file_path: str):
 
 def read_file(file_obj: DataFile):
     """Reads file depending on the file_type of the object and returns DataFrame with data once done reading file"""
+    #file_header, header_names = get_header(file_obj)
     try:
         if file_obj.file_type in [".csv", ".data"]:
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
         elif file_obj.file_type in [".xlsx"]:
             return pd.read_excel(file_obj.file_path)
-        elif file_obj.file_type in [".txt", ".arff"]:
+        else:
+            # Confirmed to work with .txt, .arff, and .dat
             return pd.read_table(file_obj.file_path, sep=None, engine='python')
     except pd.errors.ParserError as e:
         return e
+
+def get_header(file_obj: DataFile) -> tuple[int | None, list[str]]:
+    """Notes: Pass header=0 and names=[] to use an existing header in the first line of the file, pass
+    header=None and names=[] when we don't need a header to prevent decimal amounts from being added to the
+    first line, and pass header=0 and names populated with the desired column names to manually add a different
+    header. header and names are parameters for pd.read_*."""
+    header = None
+    header_names = []
+    create_header = True
+    if file_obj.include_header:
+        header = 0
+        with open(file_obj.file_path) as file:
+            # TODO: Check if the first line of the file is the header, and if so leave header_names as an empty
+            # list and set create_header to False.  Otherwise, need to figure out how many columns there are and create header.
+            pass
     
+    return header, header_names
+
+# TODO: Put this code fragment somewhere useful
+# It gets the name of the class from the filename for a DataFile object called 'file_obj'
+# os.path.basename(file_obj.file_path).split(".")[0]
 
 def process_files(file_objs: list[DataFile]):
     """Loads and concatenates all csv files in file_paths and returns dataframe"""
@@ -135,14 +157,11 @@ def create_output_file(df, file_name):
 def main():
     # file_objs = load_file_objs()
     # output_file_name = get_output_file_name()
+    
     file_objs = process_arguments()
-    for file_obj in file_objs:
-        print(file_obj.class_col_index)
-        print(file_obj.ignore_cols)
-    '''
     df = process_files(file_objs)
     df.to_csv(sys.stdout, index=False)
-    '''
+    
     # create_output_file(df, output_file_name)
 
 
