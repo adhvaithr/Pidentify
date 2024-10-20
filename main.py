@@ -12,7 +12,7 @@ import sys
 @dataclass
 class DataFile:
     """Object for each file containing data.  Note that -1 for class_col_index indicates to get the class name
-    from the filename, and -1 for ignore_cols indicate that there are no columns to ignore."""
+    from the filename."""
     file_path: str
     file_type: str
     class_col_index: int
