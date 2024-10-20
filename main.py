@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import pandas as pd
 import os
-
+import sys
 
 # local file paths to test with
 # test/ datasets/wine\ quality/winequality-red.csv
@@ -11,15 +11,35 @@ import os
 
 @dataclass
 class DataFile:
-    """Object for each file containing data"""
+    """Object for each file containing data.  Note that -1 for class_col_index indicates to get the class name
+    from the filename, and -1 for ignore_cols indicate that there are no columns to ignore."""
     file_path: str
     file_type: str
     class_col_index: int
+    is_training: bool
+    ignore_cols: list[int]
+    include_header: bool
     delimiter: str = None
+
+
+def process_arguments():
+    """Processes command line arguments into list of Datafile objects"""
+    args = sys.argv
+    include_header = bool(int(args[1]))
+    class_col = int(args[2]) if args[2] else -1
+    ignore_cols = list(map(int, args[3].split(','))) if args[3] else -1
+    is_training = bool(int(args[4]))
+    input_files = args[5:]
+
+    extensions = list(map(get_file_extension, input_files))
+
+    datafile_list = [DataFile(file_path=input_files[i], file_type=extensions[i],class_col_index=class_col, ignore_cols=ignore_cols, is_training=is_training, include_header=include_header) for i in range(len(input_files))]
+    return datafile_list
 
 def load_file_objs():
     """Prompts user for file paths where data is stored, and returns an array with DataFile objects"""
     file_objs = []
+    print(process_arguments())
     while True:
         file_path = input("Enter file path to data file (press enter to exit): ").strip()     
 
@@ -58,10 +78,10 @@ def get_file_extension(file_path: str):
 def read_file(file_obj: DataFile):
     """Reads file depending on the file_type of the object and returns DataFrame with data once done reading file"""
     try:
-        if file_obj.file_type in [".csv", ".data", ".txt"]:
+        if file_obj.file_type in [".csv", ".data"]:
             return pd.read_csv(file_obj.file_path, sep=None, engine='python')
         elif file_obj.file_type in [".xlsx"]:
-            return pd.read_excel(file_obj.file_path, sep=None, engine='python')
+            return pd.read_excel(file_obj.file_path)
         elif file_obj.file_type in [".txt", ".arff"]:
             return pd.read_table(file_obj.file_path, sep=None, engine='python')
     except pd.errors.ParserError as e:
@@ -113,10 +133,17 @@ def create_output_file(df, file_name):
     df.to_csv(file_name, index=False)
 
 def main():
-    file_objs = load_file_objs()
-    output_file_name = get_output_file_name()
+    # file_objs = load_file_objs()
+    # output_file_name = get_output_file_name()
+    file_objs = process_arguments()
+    for file_obj in file_objs:
+        print(file_obj.class_col_index)
+        print(file_obj.ignore_cols)
+    '''
     df = process_files(file_objs)
-    create_output_file(df, output_file_name)
+    df.to_csv(sys.stdout, index=False)
+    '''
+    # create_output_file(df, output_file_name)
 
 
 if __name__ == "__main__":
