@@ -21,10 +21,33 @@ class DataFile:
     include_header: bool
     delimiter: str = None
 
+def print_help():
+    print("""python UCI_ml_copy.py [-H] include_header class_col ignore_cols training input_file(s)
+    \t-H\t\tOptional. Prints the usage statement. All other arguments are ignored.
+    \tinclude_header\tInteger. If 1, add header if not already in dataset. If 0, drop header if dataset has one.
+    \tclass_col\tInteger. The index of the classification column.
+    \tignore_col(s)\tInteger(s). A list of indexes seperated by comma. Ex. '0,1,2,3,4,5,6'.
+    \ttraining\tInteger. If 1, following files are training datasets. If 0, following files are testing datasets.
+    \tinput_file(s)\tFile paths. The remaining arguments are paths to files. Invalid file paths are ignored.""")
+
+def check_arguments(argument_list: list):
+    if (len(argument_list) == 1):
+        print("No arguments provided.")
+        print_help()
+        sys.exit(1)
+    else:
+        if (argument_list[1] == "-H"):
+            print_help()
+            sys.exit(0)
+        elif (len(argument_list) < 6):
+            print("Not enough arguments.")
+            print_help()
+            sys.exit(1)
 
 def process_arguments():
     """Processes command line arguments into list of Datafile objects"""
     args = sys.argv
+    check_arguments(args)
     include_header = bool(int(args[1]))
     class_col = int(args[2]) if args[2] else -1
     ignore_cols = list(map(int, args[3].split(','))) if args[3] else []
@@ -33,40 +56,10 @@ def process_arguments():
 
     extensions = list(map(get_file_extension, input_files))
 
-    datafile_list = [DataFile(file_path=input_files[i], file_type=extensions[i],class_col_index=class_col, ignore_cols=ignore_cols, is_training=is_training, include_header=include_header) for i in range(len(input_files))]
+    datafile_list = [DataFile(file_path=input_files[i], file_type=extensions[i], class_col_index=class_col,\
+                               ignore_cols=ignore_cols, is_training=is_training, include_header=include_header)\
+                                  for i in range(len(input_files))]
     return datafile_list
-
-def load_file_objs():
-    """Prompts user for file paths where data is stored, and returns an array with DataFile objects"""
-    file_objs = []
-    print(process_arguments())
-    while True:
-        file_path = input("Enter file path to data file (press enter to exit): ").strip()     
-
-        # Break out of while loop if empty input  
-        if not file_path:
-            break     
-
-        # Discard file path input if no existing file found
-        if not os.path.exists(file_path):
-            print("Error: File not found.")
-            continue
-        try:
-            # Prompt user for index of class column
-            class_col = int(input("Enter column index (starting at 0) of class column: ").strip())
-            # TODO: check column in valid range
-        except ValueError:
-            print("Error: Class column must be integer. File not loaded")
-            continue
-        
-        # Get file type
-        extension = get_file_extension(file_path)
-
-        # Create DataFile object and add to file_objs list
-        file_obj = DataFile(file_path = file_path, file_type=extension, class_col_index = class_col)
-        file_objs.append(file_obj)
-
-    return file_objs
 
 def get_file_extension(file_path: str):
     """Returns file extension of said file, taking the file path as an argument"""
@@ -137,7 +130,7 @@ def process_files(file_objs: list[DataFile]):
     """Loads and concatenates all csv files in file_paths and returns dataframe"""
     # TODO: clean up datasets with incorrectly formatted points
     loaded_dfs = []
-    for file_obj in file_objs: # looping through file_objs list created in load_file_objs
+    for file_obj in file_objs:
         df = read_file(file_obj)
         df.dropna(inplace = True)
         df.drop_duplicates(inplace = True)
@@ -167,32 +160,12 @@ def valid_file_name(desired_name: str):
             return False
     return True
 
-def get_output_file_name():
-    """Get desired name from user for output CSV file"""
-    name = input("Enter desired name for output file: ").strip()
-    while not (name and valid_file_name(name)):
-        if not name:
-            print("File name can't be empty or contain only whitespace.")
-        else:
-            print("File name can't contain special characters besides space and underscore.")
-        name = input("Enter desired name for output file: ").strip()
-    if (" " in name):
-        name = name.replace(" ", "_")
-    return name
-
-def create_output_file(df, file_name):
-    """Creates a csv file called filename containing combined dataframe"""
-    df.to_csv(file_name, index=False)
 
 def main():
-    # file_objs = load_file_objs()
-    # output_file_name = get_output_file_name()
-    
     file_objs = process_arguments()
     df = process_files(file_objs)
     keep_col_names = True if df.keys().dtype == "object" else False
     df.to_csv(sys.stdout, index=False, header=keep_col_names)
-    # create_output_file(df, output_file_name)
 
 
 if __name__ == "__main__":
