@@ -95,6 +95,16 @@ def process_header(file_obj: DataFile, df: pd.DataFrame) -> pd.DataFrame:
         has_header = True
     if has_header and not file_obj.include_header:
         df.drop(0, inplace=True)
+    elif has_header and file_obj.include_header:
+        modified_header = []
+        for i, col_name in enumerate(df.iloc[0]):
+            if i in file_obj.ignore_cols:
+                modified_header.append("nonNum" + col_name)
+            else:
+                modified_header.append(col_name)
+        header_map = dict(zip(range(len(df.iloc[0])), modified_header))
+        df.rename(columns=header_map,  inplace=True)
+        df.drop(0, inplace=True)
     elif not has_header and file_obj.include_header:
         new_header = create_header(file_obj, df)
         header_map = dict(zip(range(len(df.iloc[0])), new_header))
