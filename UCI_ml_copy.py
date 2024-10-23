@@ -194,6 +194,7 @@ def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
         df.dropna(inplace=True)
         df.drop_duplicates(inplace=True)
         df = move_class_to_first_column(df, file_obj.class_col_index)
+        df = move_non_num_columns_to_last(file_obj.class_col_index, df, file_obj.ignore_cols)
         # reads file first, then cleans and sorts columns in dataframe, then adds dataframe to list
         loaded_dfs.append(df)
     # combines dataframes in list into one
@@ -206,9 +207,8 @@ def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
     return final_df 
     '''
 
-
-def move_class_to_first_column(df: pd.DataFrame, class_col_ind: int) -> pd.DataFrame:
-    """
+def move_class_to_first_column(df, class_col_ind: int):
+    """"
     Swaps class column at index class_col_ind with the first column in the df Dataframe
 
     :param pd.DataFrame df: unformatted dataset
@@ -216,12 +216,27 @@ def move_class_to_first_column(df: pd.DataFrame, class_col_ind: int) -> pd.DataF
     :returns: formatted dataset with class column at first column
     :rtype: pd.DataFrame
     """
-
     columns = list(df.columns)
-    # moves the class column to the last column in the dataframe
-    columns[class_col_ind], columns[0] = columns[0], columns[class_col_ind]
-    return df[columns]
+    target_name = columns[class_col_ind]
+    first_column = df.pop(target_name)
+    df.insert(0, target_name, first_column)
+    return df
 
+def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
+    """
+    Moves all non num columns to the end of the dataframe
+
+    :param prev_class_index: the previous index for the class name
+    :param pd.DataFrame df: unformatted dataset
+    :param ignored_cols: a list of the columns we want to ignore
+    :returns: formatted dataset with all non columns at the end
+    :rtype: pd.DataFrame
+    """
+    columns = list(df.columns) #target in index 0
+    new_ignored_cols = [i+1 for i in ignored_cols if i < prev_class_index]
+    ignored_name_cols = [columns[i] for i in new_ignored_cols]
+    df = df[[col for col in columns if col not in ignored_name_cols] + ignored_name_cols]
+    return df
 
 def valid_file_name(desired_name: str) -> bool:
     """
@@ -250,3 +265,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
+    columns = list(df.columns) #target in index 0
+    new_ignored_cols = [i+1 for i in ignored_cols if i < prev_class_index]
+    ignored_name_cols = [columns[i] for i in new_ignored_cols]
+    df = df[[col for col in columns if col not in ignored_name_cols] + ignored_name_cols]
+    return df
+
+def move_class_to_first_column(df, class_col_ind: int):
+    Swaps class column at index class_col_ind with the last column in the df Dataframe
+    columns = list(df.columns)
+    target_name = columns[class_col_ind]
+    first_column = df.pop(target_name)
+    df.insert(0, target_name, first_column)
+    return df
+"""
