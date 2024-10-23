@@ -265,20 +265,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""
-def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
-    columns = list(df.columns) #target in index 0
-    new_ignored_cols = [i+1 for i in ignored_cols if i < prev_class_index]
-    ignored_name_cols = [columns[i] for i in new_ignored_cols]
-    df = df[[col for col in columns if col not in ignored_name_cols] + ignored_name_cols]
-    return df
-
-def move_class_to_first_column(df, class_col_ind: int):
-    Swaps class column at index class_col_ind with the last column in the df Dataframe
-    columns = list(df.columns)
-    target_name = columns[class_col_ind]
-    first_column = df.pop(target_name)
-    df.insert(0, target_name, first_column)
-    return df
-"""
