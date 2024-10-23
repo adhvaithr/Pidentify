@@ -174,10 +174,6 @@ def create_header(file_obj: DataFile, df: pd.DataFrame) -> list[str]:
 
     return header
 
-# TODO: Put this code fragment somewhere useful
-# It gets the name of the class from the filename for a DataFile object called 'file_obj'
-# os.path.basename(file_obj.file_path).split(".")[0]
-
 
 def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
     """
@@ -193,7 +189,10 @@ def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
         df = read_file(file_obj)
         df.dropna(inplace=True)
         df.drop_duplicates(inplace=True)
-        df = move_class_to_first_column(df, file_obj.class_col_index)
+        if file_obj.class_col_index != -1:
+            df = move_class_to_first_column(df, file_obj.class_col_index)
+        else:
+            df.insert(0, "className", [os.path.basename(file_obj.file_path).split(".")[0]] * len(df))
         df = move_non_num_columns_to_last(file_obj.class_col_index, df, file_obj.ignore_cols)
         # reads file first, then cleans and sorts columns in dataframe, then adds dataframe to list
         loaded_dfs.append(df)
@@ -232,8 +231,11 @@ def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
     :returns: formatted dataset with all non columns at the end
     :rtype: pd.DataFrame
     """
-    columns = list(df.columns) #target in index 0
-    new_ignored_cols = [i+1 for i in ignored_cols if i < prev_class_index]
+    columns = list(df.columns) #target in index 
+    if prev_class_index == -1:
+        new_ignored_cols = [i+1 for i in ignored_cols]
+    else:
+        new_ignored_cols = [i+1 for i in ignored_cols if i < prev_class_index]
     ignored_name_cols = [columns[i] for i in new_ignored_cols]
     df = df[[col for col in columns if col not in ignored_name_cols] + ignored_name_cols]
     return df
