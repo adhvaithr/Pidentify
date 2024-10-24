@@ -22,7 +22,7 @@ class DataFile:
 
 
 def print_help():
-    print("""python UCI_ml_copy.py [-H] include_header class_col ignore_cols training input_file(s)
+    print("""python UCI_ml_copy.py [-H] include_header class_col ignore_cols input_file(s)
     \t-H\t\tOptional. Prints the usage statement. All other arguments are ignored.
     \tinclude_header\tInteger. If 1, add header if not already in dataset. If 0, drop header if dataset has one.
     \tclass_col\tInteger. The index of the classification column.
