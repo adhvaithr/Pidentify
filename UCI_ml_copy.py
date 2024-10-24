@@ -16,7 +16,6 @@ class DataFile:
     file_path: str
     file_type: str
     class_col_index: int
-    is_training: bool
     ignore_cols: list[int]
     include_header: bool
     delimiter: str = None
@@ -28,7 +27,6 @@ def print_help():
     \tinclude_header\tInteger. If 1, add header if not already in dataset. If 0, drop header if dataset has one.
     \tclass_col\tInteger. The index of the classification column.
     \tignore_col(s)\tInteger(s). A list of indexes seperated by comma. Ex. '0,1,2,3,4,5,6'.
-    \ttraining\tInteger. If 1, following files are training datasets. If 0, following files are testing datasets.
     \tinput_file(s)\tFile paths. The remaining arguments are paths to files. Invalid file paths are ignored.""")
 
 
@@ -41,7 +39,7 @@ def check_arguments(argument_list: list):
         if (argument_list[1] == "-H"):
             print_help()
             sys.exit(0)
-        elif (len(argument_list) < 6):
+        elif (len(argument_list) < 5):
             print("Not enough arguments.")
             print_help()
             sys.exit(1)
@@ -60,13 +58,12 @@ def process_arguments() -> DataFile:
     include_header = bool(int(args[1]))
     class_col = int(args[2]) if args[2] else -1
     ignore_cols = list(map(int, args[3].split(','))) if args[3] else []
-    is_training = bool(int(args[4]))
-    input_files = args[5:]
+    input_files = args[4:]
 
     extensions = list(map(get_file_extension, input_files))
 
     datafile_list = [DataFile(file_path=input_files[i], file_type=extensions[i], class_col_index=class_col,
-                              ignore_cols=ignore_cols, is_training=is_training, include_header=include_header)
+                              ignore_cols=ignore_cols, include_header=include_header)
                      for i in range(len(input_files))]
     return datafile_list
 
