@@ -237,7 +237,7 @@ def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
 
 
 def _is_col_numerical(col) -> pd.Series:
-    """Find entries in a column, which is supposed to be all numerical, that do not contain
+    """Find entries in a column, which are supposed to be all numerical, that do not contain
     numerical data."""
     def is_entry_numerical(entry) -> bool:
         """Return True if the entry in a column is numerical and False otherwise."""
