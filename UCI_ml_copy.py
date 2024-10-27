@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import pandas as pd
+import numpy as np
 import os
 import sys
 
@@ -236,25 +237,21 @@ def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
     return df
 
 
-def _is_col_numerical(col) -> pd.Series:
-    """Find entries in a column, which are supposed to be all numerical, that do not contain
-    numerical data."""
-    def is_entry_numerical(entry) -> bool:
-        """Return True if the entry in a column is numerical and False otherwise."""
+def _convert_non_num_to_na(entry):
+        """Return the entry if the entry is numerical and null otherwise."""
         try:
             float(entry)
         except ValueError:
-            return False
-        return True
-    return col.apply(is_entry_numerical)
+            return np.NaN
+        return entry
 
 
 def drop_non_num(num_cols: list[int], df: pd.DataFrame) -> None:
-    """Change all non-numerical entries in columns that are supposed to be numerical into empty entries."""
+    """Change all non-numerical entries in columns that are supposed to be numerical into null entries."""
     for num_col in num_cols:
         if df.dtypes[df.columns[num_col]] != "object":
             continue
-        df[df.columns[num_col]] = df[df.columns[num_col]].where(_is_col_numerical)
+        df[df.columns[num_col]] = df[df.columns[num_col]].apply(_convert_non_num_to_na)
 
 
 def valid_file_name(desired_name: str) -> bool:
