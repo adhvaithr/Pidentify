@@ -180,15 +180,14 @@ def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
     :returns: concatenated dataset
     :rtype: pd.DataFrame
     """
-    # TODO: clean up datasets with incorrectly formatted points
     loaded_dfs = []
     for file_obj in file_objs:
         df = read_file(file_obj)
+        # Numerical columns with the class column excluded, since it can be numerical or non-numerical
         num_cols = list(set(range(len(df.columns))) - set(file_obj.ignore_cols) - \
                         set([file_obj.class_col_index] if file_obj.class_col_index != -1 else []))
         drop_non_num(num_cols, df)
         df.dropna(subset = [df.columns[col_idx] for col_idx in num_cols], inplace=True)
-        df.drop_duplicates(inplace=True)
         if file_obj.class_col_index != -1:
             df = move_class_to_first_column(df, file_obj.class_col_index)
         else:
@@ -197,14 +196,10 @@ def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
         # reads file first, then cleans and sorts columns in dataframe, then adds dataframe to list
         loaded_dfs.append(df)
     # combines dataframes in list into one
-    return pd.concat(loaded_dfs, ignore_index=True)
-    # TODO: Verify that dropping duplicates will remove redundant column names when there are multiples files
-    # passed at the same time and decide whether to use the commented out code below
-    '''
     final_df = pd.concat(loaded_dfs, ignore_index=True)
     final_df.drop_duplicates(inplace = True) 
     return final_df 
-    '''
+
 
 def move_class_to_first_column(df, class_col_ind: int):
     """"
