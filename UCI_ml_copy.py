@@ -184,7 +184,10 @@ def process_files(file_objs: list[DataFile]) -> pd.DataFrame:
     loaded_dfs = []
     for file_obj in file_objs:
         df = read_file(file_obj)
-        df.dropna(inplace=True)
+        num_cols = list(set(range(len(df.columns))) - set(file_obj.ignore_cols) - \
+                        set([file_obj.class_col_index] if file_obj.class_col_index != -1 else []))
+        drop_non_num(num_cols, df)
+        df.dropna(subset = [df.columns[col_idx] for col_idx in num_cols], inplace=True)
         df.drop_duplicates(inplace=True)
         if file_obj.class_col_index != -1:
             df = move_class_to_first_column(df, file_obj.class_col_index)
@@ -236,6 +239,28 @@ def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
     ignored_name_cols = [columns[i] for i in new_ignored_cols]
     df = df[[col for col in columns if col not in ignored_name_cols] + ignored_name_cols]
     return df
+
+
+def _is_col_numerical(col) -> pd.Series:
+    """Find entries in a column, which is supposed to be all numerical, that do not contain
+    numerical data."""
+    def is_entry_numerical(entry) -> bool:
+        """Return True if the entry in a column is numerical and False otherwise."""
+        try:
+            float(entry)
+        except ValueError:
+            return False
+        return True
+    return col.apply(is_entry_numerical)
+
+
+def drop_non_num(num_cols: list[int], df: pd.DataFrame) -> None:
+    """Change all non-numerical entries in columns that are supposed to be numerical into empty entries."""
+    for num_col in num_cols:
+        if df.dtypes[df.columns[num_col]] != "object":
+            continue
+        df[df.columns[num_col]] = df[df.columns[num_col]].where(_is_col_numerical)
+
 
 def valid_file_name(desired_name: str) -> bool:
     """
