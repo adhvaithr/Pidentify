@@ -227,11 +227,11 @@ def move_non_num_columns_to_last(prev_class_index, df, ignored_cols: list):
     :returns: formatted dataset with all non columns at the end
     :rtype: pd.DataFrame
     """
-    columns = list(df.columns) #target in index 
+    columns = list(df.columns) #target in index
     if prev_class_index == -1:
         new_ignored_cols = [i+1 for i in ignored_cols]
     else:
-        new_ignored_cols = [i+1 for i in ignored_cols if i < prev_class_index]
+        new_ignored_cols = [i + 1 if i < prev_class_index else i for i in ignored_cols]
     ignored_name_cols = [columns[i] for i in new_ignored_cols]
     df = df[[col for col in columns if col not in ignored_name_cols] + ignored_name_cols]
     return df
