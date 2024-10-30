@@ -3,3 +3,6 @@ cpv: alglib.a classMember.h fit.cpp fit.h main.cpp process.cpp process.h
 
 alglib.a:
 	cd alglib/src && $(MAKE)
+
+clean:
+	find . -name '*.[oa]' -print | xargs /bin/rm -f
