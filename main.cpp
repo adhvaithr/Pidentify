@@ -42,9 +42,48 @@ std::vector<ClassMember> readDataset(const std::string& filename) {
     return dataset;
 }
 
-int main() {
-    std::string filename = "iris.data";
-    std::vector<ClassMember> dataset = readDataset(filename);
+/*Read dataset from custom formatted file where columns are in the following order:
+class name, numerical features, nonnumerical features (if any).*/
+std::vector<ClassMember> readFormattedDataset(const std::string& filename) {
+    std::vector<ClassMember> dataset;
+    std::ifstream file(filename);
+    std::string line;
+
+    // Read the header
+    std::getline(file, line);
+    std::stringstream header(line);
+    std::string colName;
+    int numFeatures = 0;
+    std::getline(header, colName, ',');
+    // Count the number of numerical features
+    while (std::getline(header, colName, ',')) {
+        if (colName.compare(0, 6, "nonNum") == 0) {
+            break;
+        }
+        numFeatures += 1;
+    }
+
+    // Only add the numerical features to the ClassMember vector
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        ClassMember obj;
+        std::string feature;
+        std::getline(ss, obj.name, ',');
+        for (int i = 0; i < numFeatures; ++i) {
+            std::getline(ss, feature, ',');
+            obj.features.push_back(std::stod(feature));
+        }
+
+        dataset.push_back(obj);
+    }
+    file.close();
+
+    return dataset;
+}
+
+int main(int argc, char* argv[]) {
+    std::string filename = argv[1];
+    std::vector<ClassMember> dataset = readFormattedDataset(filename);
 
     std::vector<double> sorted_distances = process(dataset);
 
