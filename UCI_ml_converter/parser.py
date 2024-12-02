@@ -105,8 +105,8 @@ class Parser:
 
     def _process_flags(self, user_input: list[str]) -> tuple[int, dict]:
         """
-        Parse arguments for the following optional flags: -d, -cls, -clsd, --delay_write,
-        --drop_col, --merge_cls.
+        Parse arguments for the following optional flags: -d, -db, -cls, -clsd, --delay_write,
+        --drop_col, --merge_cls, --infer_nn.
         """
         flags = ["-d", "-db", "-cls", "-clsd", "--delay_write", "--drop_col", "--merge_cls", "--infer_nn"]
         optional_params = {"ignore_rows": 0, "drop_footer": 0, "cls_drop": False, "custom_cls": [],
@@ -145,16 +145,26 @@ class Parser:
 
     def _print_help(self) -> None:
         help_format = "\t{:<25}{}"
-        print("python UCI_ml_copy.py [-H] include_header class_col ignore_cols [-d rows] [-cls custom_class] [-clsd drop_chars] input_file(s)/folder(s) [-rm file(s)]")
-        print(help_format.format("-H", "Optional. Prints the usage statement. All other arguments are ignored."))
-        print(help_format.format("include_header", "Integer. If 1, add header if not already in dataset. If 0, drop header if dataset has one."))
-        print(help_format.format("class_col", "Integer. The index of the classification column."))
-        print(help_format.format("ignore_col(s)", "Integer(s). A list of indexes seperated by comma. Ex. '0,1,2,3,4,5,6'."))
-        print(help_format.format("-d rows", "Optional. Integer. Drop the specified number of rows from the beginning of the file."))
-        print(help_format.format("-cls custom_class", "Optional. String. Custom class name for all rows of input file(s)."))
-        print(help_format.format("-clsd drop_chars", "Optional. String(s) separated by comma. Class name retrieved from file name with corresponding characters dropped. "\
-        "Prepending/appending a * to the front/back of drop_chars indicates to drop all characters before\after drop_chars, "\
-        "including drop_chars."))
-        print(help_format.format("input_file(s)/folder(s)", "File/folder paths. The remaining arguments are paths to files/folders. Invalid file paths are ignored."))
-        print(help_format.format("-rm file(s)", "Optional. File paths or *filename. Drop files that match the provided file path or all files that match "\
-        "the filename."))
+        print("python UCI_ml_converter.py [-H] include_header class_col ignore_cols [-d rows] [-db rows] [-cls custom_class] "\
+              "[-clsd drop_chars] [--delay_write] [--drop_col cols] [--merge_cls cols] [--infer_nn] "\
+              "input_file(s)/folder(s) [--merge file(s)] [-rm file(s)]")
+        command_line_format = {"-H": "Optional. Prints the usage statement. All other arguments are ignored.",
+                               "include_header": "Integer. If 1, add header if not already in dataset. If 0, drop header if dataset has one.",
+                               "class_col": "Integer. The index of the classification column.",
+                               "ignore_col(s)": "Integer(s). A list of indexes seperated by comma. Ex. '0,1,2,3,4,5,6'.",
+                               "-d rows": "Optional. Integer. Drop the specified number of rows from the beginning of the file.",
+                               "-db rows": "Optional. Integer. Drop the specified number of rows from the end of the file.",
+                               "-cls custom_class": "Optional. String. Custom class name for all rows of input file(s).",
+                               "-clsd drop_chars": "Optional. String(s) separated by comma. Class name retrieved from file name "\
+                                                   "with corresponding characters dropped. Prepending/appending a * to the front/back of drop_chars "\
+                                                   "indicates to drop all characters before\after drop_chars, including drop_chars.",
+                               "--delay_write": "Optional. Flag that indicates there should be no output until all files have finished processing.",
+                               "--drop_col cols": "Optional. Integer(s). A list of indexes separated by comma.  Indicates columns to remove.",
+                               "--merge_cls cols": "Optional. Integer(s). A list of indexes separated by comma. Indicates columns to merge to form the class column.",
+                               "--infer_nn": "Optional. Flag that indicates to trust Pandas to figure out which columns are non-numerical.",
+                               "input_file(s)/folder(s)": "File/folder paths. The remaining arguments are paths to files/folders. Invalid file paths are ignored.",
+                               "--merge file(s)": "Optional. File/folder paths. Concatenate file column to the end of the last input file.",
+                               "-rm file(s)": "Optional. File paths or *filename. Drop files that match the provided file path or all files that match "\
+                                              "the filename."}
+        for command, description in command_line_format.items():
+            print(help_format.format(command, description))

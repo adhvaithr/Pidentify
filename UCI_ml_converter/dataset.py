@@ -32,7 +32,7 @@ class Dataset:
             except Exception as e:
                 self._logger.error(f"{datafile.file_path}: {type(e)} - {e}")
                 self._success = False
-                continue
+                continue   
             if self.delay_write:
                 loaded_dfs.append(df)
             else:
@@ -41,7 +41,7 @@ class Dataset:
             df = pd.concat(loaded_dfs, ignore_index=True)
             Dataset._output_csv(df)
         status = "success" if self._success else "failed"
-        self._logger.info(f"Status: {status}")
+        self._logger.info(f"Status: {status}\n")
 
 
     @staticmethod
