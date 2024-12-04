@@ -2,6 +2,8 @@ from dataclasses import dataclass
 import pandas as pd
 import os
 import numpy as np
+import gzip
+import shutil
 from scipy.io import arff
 
 
@@ -53,6 +55,13 @@ class DataFile:
         :returns: Dataframe read by Pandas depending on extension of file.
         :rtype: pd.DataFrame
         """
+        if self.file_path.endswith(".gz"):
+            uncompressed_file_path = self.file_path.replace(".gz", "")
+            with gzip.open(self.file_path, "rb") as file_in:
+                with open(uncompressed_file_path, "wb") as file_out:
+                    shutil.copyfileobj(file_in, file_out)
+            self.file_path = uncompressed_file_path
+            self.file_type = self.file_type[:-3]
         if self.file_type in [".csv", ".data"]:
             return pd.read_csv(self.file_path, header=None, skiprows=self.ignore_rows, skipfooter=self.drop_footer, sep=None, engine='python')
         elif self.file_type in [".xlsx"]:
