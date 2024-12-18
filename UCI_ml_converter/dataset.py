@@ -50,4 +50,4 @@ class Dataset:
         Write contents of dataframe to the standard output.
         """
         keep_col_names = True if df.keys().dtype == "object" else False
-        df.to_csv(sys.stdout, index=False, header=keep_col_names)
+        df.to_csv(sys.stdout, index=False, header=keep_col_names, lineterminator="\n")

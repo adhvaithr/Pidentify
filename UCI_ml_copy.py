@@ -248,7 +248,7 @@ def _convert_non_num_to_na(entry):
         try:
             float(entry)
         except ValueError:
-            return np.NaN
+            return np.nan
         return entry
 
 
