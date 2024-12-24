@@ -1,5 +1,5 @@
-cpv: alglib.a classMember.h fit.cpp fit.h main.cpp process.cpp process.h
-	g++ -Ialglib/src -std=c++11 -o cpv fit.cpp main.cpp process.cpp alglib.a
+cpv: alglib.a classMember.h modelState.h fit.cpp fit.h main.cpp process.cpp process.h test.cpp test.h
+	g++ -Ialglib/src -std=c++11 -pthread -o cpv fit.cpp main.cpp process.cpp test.cpp alglib.a
 
 alglib.a:
 	cd alglib/src && $(MAKE)
