@@ -7,6 +7,7 @@
 #include "interpolation.h"
 #include "fit.h"
 #include "modelState.h"
+#include <iterator>
 
 using namespace alglib;
 
@@ -226,7 +227,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     m.unlock();
 }
 
-int fitClasses(const std::unordered_map<std::string, std::vector<double> >& sorted_distances) {
+int fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_distances) {
     std::unordered_map<std::string, std::thread> threads;
     std::unordered_map<std::string, std::future<void> > results;
 
@@ -234,10 +235,16 @@ int fitClasses(const std::unordered_map<std::string, std::vector<double> >& sort
         size_t l = pair.second.size();
 
         // construct corresponding y values in terms of distances for ECDF points
-        std::vector<double> y(l);
+        std::vector<double> y(l + 2);
         for (size_t i = 0; i < l; ++i) {
-            y[i] = 1 - static_cast<double>(i + 1) / (l + 1);
+            y[i + 1] = 1 - static_cast<double>(i + 1) / (l + 1);
         }
+
+        // Insert (0,0) and faraway point into ECDF points
+        pair.second.insert(pair.second.begin(), 0);
+        y[0] = 1;
+        pair.second.insert(pair.second.end(), 1);
+        y[l + 1] = 0;
 
         std::packaged_task<void(std::vector<double>, std::vector<double>, std::string)> parallelCurveFitting{ curveFitting };
         results[pair.first] = parallelCurveFitting.get_future();
