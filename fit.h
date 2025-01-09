@@ -12,7 +12,7 @@ struct FitResult {
     double wrmsError;
 };
 
-int fitClasses(const std::unordered_map<std::string, std::vector<double> >& sorted_distances);
+int fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_distances);
 double logistic(double k, double alpha, double x);
 double hyperbolic_tangent(double k, double alpha, double x);
 double arctangent(double k, double alpha, double x);

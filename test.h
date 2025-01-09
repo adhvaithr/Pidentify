@@ -4,7 +4,7 @@
 #include <vector>
 #include "classMember.h"
 
-void trainTestSplit(std::vector<ClassMember>& dataset, std::vector<ClassMember>& testDataset, double testSize);
-void test(const std::vector<ClassMember>& dataset, double pvalueThreshold);
+void kFoldSplit(std::vector<ClassMember>& dataset, std::vector<ClassMember> kSets[]);
+void test(const std::vector<ClassMember>& dataset, double pvalueThreshold, size_t fold);
 
 #endif

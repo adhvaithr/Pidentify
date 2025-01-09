@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+#include <array>
 #include <string>
 #include <cstring>
 #include <sstream>
@@ -8,6 +9,7 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
+#include <iterator>
 
 #include "fit.h"
 #include "process.h"
@@ -20,6 +22,8 @@ using namespace std;
 ModelState MODEL_STATE;
 std::mutex m;
 double NUM_THREADS;
+int K_FOLDS = 10;
+std::vector<std::array<double, 3> > predictionStatistics(K_FOLDS);
 
 /*Read dataset from custom formatted file where columns are in the following order:
 class name, numerical features, nonnumerical features (if any).*/
@@ -76,37 +80,44 @@ bool isNonnegativeDouble(char* value) {
 
 int main(int argc, char* argv[]) {
     // Error checking on command line arguments
-    if ((argc < 4) || (argc > 5)) {
+    if (argc < 3) {
         std::cout << "Incorrect number of command line arguments passed.\n";
-        std::cout << "Format: executable pvalueThreshold testSize datasetFilepath [testDatasetFilepath]\n";
-        std::cout << "Example: ./cpv.exe 0.50 0.30 filename.csv\n";
+        std::cout << "Format: executable pvalueThreshold datasetFilepath\n";
+        std::cout << "Example: ./cpv.exe 0.50 filename.csv\n";
         return 0;
     }
     
-    if (!isNonnegativeDouble(argv[1]) || !isNonnegativeDouble(argv[2])) {
-        std::cout << "pvalueThreshold and testSize must be nonnegative doubles.\n";
+    if (!isNonnegativeDouble(argv[1])) {
+        std::cout << "pvalueThreshold must be nonnegative double.\n";
         return 0;
     }
 
-    double pvalueThreshold = std::atof(argv[1]), testSize = std::atof(argv[2]);
-    std::string datasetFilename = argv[3], testDatasetFilename;
-    if (argc == 5) { testDatasetFilename = argv[4]; }
-
-    setThreads();
+    double pvalueThreshold = std::atof(argv[1]);
+    std::string datasetFilename = argv[2];
 
     std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
 
-    std::vector<ClassMember> testDataset;
-    if (testDatasetFilename != "") {
-        testDataset = readFormattedDataset(testDatasetFilename);
-    }
-    else {
-        trainTestSplit(dataset, testDataset, testSize);
-    }
-    
-    std::unordered_map<std::string, std::vector<double> > sorted_distances = process(dataset);
+    std::vector<ClassMember> kSets[K_FOLDS];
+    kFoldSplit(dataset, kSets);
 
-    fitClasses(sorted_distances);
+    setThreads();
 
-    test(testDataset, pvalueThreshold);
+    for (int i = 0; i < K_FOLDS; ++i) {
+        std::vector<ClassMember> trainDataset;
+        
+        for (int j = 0; j < K_FOLDS; ++j) {
+            if (j != i) {
+                trainDataset.reserve(trainDataset.size() + kSets[j].size());
+                trainDataset.insert(trainDataset.end(), kSets[j].begin(), kSets[j].end());
+            }
+        }
+        
+        std::cout << "Iteration " << i << ":\n";
+
+        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset);
+
+        fitClasses(sorted_distances);
+
+        test(kSets[i], pvalueThreshold, i);
+    }
 }

@@ -1,5 +1,6 @@
 #include <cstdlib>
-#include <ctime>
+#include <random>
+#include <string>
 #include <cmath>
 #include <vector>
 #include <iostream>
@@ -15,19 +16,44 @@
 #include "modelState.h"
 #include "fit.h"
 
-void trainTestSplit(std::vector<ClassMember>& dataset, std::vector<ClassMember>& testDataset, double testSize) {
-	// Seed random number generator based on the current time
-	std::time_t timestamp;
-	std::time(&timestamp);
-	std::cout << "Randomness for train/test split seeded to " << timestamp << ".\n";
+// Helper function to fill the k sets to a certain amount per set
+void fillFoldToLimit(std::uniform_int_distribution<>& distrib, std::mt19937& gen, int fillLimit,
+	std::vector<ClassMember>& dataset, size_t start, std::vector<ClassMember> kSets[]) {
+	bool foldFull[K_FOLDS] = { false };
 
-	std::srand(timestamp);
-	int numTestElems = dataset.size() * testSize;
-	for (int i = 0; i < numTestElems; ++i) {
-		int transferElem = std::rand() % dataset.size();
-		testDataset.push_back(std::move(dataset[transferElem]));
-		dataset.erase(dataset.begin() + transferElem);
+	size_t foldOriginalSizes[K_FOLDS];
+	for (int i = 0; i < K_FOLDS; ++i) {
+		foldOriginalSizes[i] = kSets[i].size();
 	}
+
+	int iSet;
+	for (size_t iData = start; iData < std::min(start + fillLimit * K_FOLDS, dataset.size()); ++iData) {
+		do {
+			iSet = distrib(gen);
+		} while (foldFull[iSet]);
+
+		kSets[iSet].push_back(std::move(dataset[iData]));
+
+		if (kSets[iSet].size() == foldOriginalSizes[iSet] + fillLimit) {
+			foldFull[iSet] = true;
+		}
+	}
+}
+
+// Split dataset into k sets
+void kFoldSplit(std::vector<ClassMember>& dataset, std::vector<ClassMember> kSets[]) {
+	// Create random number generator
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> distrib(0, K_FOLDS - 1);
+
+	int minElems = dataset.size() / K_FOLDS;
+
+	// Evenly divide largest multiple of K_FOLDS possible among the k sets
+	fillFoldToLimit(distrib, gen, minElems, dataset, 0, kSets);
+
+	// Place remainder into the sets with each set receiving at most one extra datapoint
+	fillFoldToLimit(distrib, gen, 1, dataset, minElems * K_FOLDS, kSets);
 }
 
 // Normalize the feature values of the test set with the means and sigmas calculated during training
@@ -100,10 +126,8 @@ void calculatePValues(const std::vector<std::unordered_map<std::string, double> 
 	}
 }
 
-//Print out the p values for every datapoint in the test set and some summary statistics
-void printPredictionResults(const std::vector<ClassMember>& dataset,
-	const std::vector<std::unordered_map<std::string, double> >& pvalues, double pvalueThreshold) {
-	double numCorrect = 0, numIncorrect = 0, numNOTA = 0, total = dataset.size();
+//Print out the p values for every datapoint in the test set
+void printPValues(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues) {
 	std::cout << "P values for test set:\n";
 	for (size_t i = 0; i < dataset.size(); ++i) {
 		// Print out the feature values for the datapoint
@@ -111,6 +135,22 @@ void printPredictionResults(const std::vector<ClassMember>& dataset,
 		std::copy(dataset[i].features.begin(), dataset[i].features.end(), std::ostream_iterator<double>(std::cout, ", "));
 		std::cout << std::endl;
 
+		// Print out the p values of the datapoint for each class
+		for (const auto& pair : pvalues[i]) {
+			std::cout << pair.first << ": " << pair.second << std::endl;
+		}
+
+		// Print out the actual class of the datapoint
+		std::cout << "Actual class: " << dataset[i].name << std::endl;
+	}
+}
+
+// Calculate the percentage predicted correctly, incorrectly, and as none of the above
+std::vector<double> calculateStatistics(const std::vector<ClassMember>& dataset,
+	const std::vector<std::unordered_map<std::string, double> >& pvalues, double pvalueThreshold) {
+	double numCorrect = 0, numIncorrect = 0, numNOTA = 0, total = dataset.size();
+
+	for (size_t i = 0; i < dataset.size(); ++i) {
 		// Find the largest p value for the datapoint
 		auto largestPValue = std::max_element(pvalues[i].begin(), pvalues[i].end(), [](const std::pair<std::string, double>& p1, const std::pair<std::string, double>& p2) {
 			return p1.second < p2.second;
@@ -122,21 +162,30 @@ void printPredictionResults(const std::vector<ClassMember>& dataset,
 			else { ++numIncorrect; }
 		}
 		else { ++numNOTA; }
-
-		// Print out the p values of the datapoint for each class
-		for (const auto& pair : pvalues[i]) {
-			std::cout << pair.first << ": " << pair.second << std::endl;
-		}
-
-		// Print out the actual class of the datapoint
-		std::cout << "Actual class: " << dataset[i].name << std::endl;
 	}
 
-	// Print out percentages for how many were predicted correctly, incorrectly, and as none of the above
 	double percentCorrect = (numCorrect / total) * 100;
 	double percentIncorrect = (numIncorrect / total) * 100;
 	double percentNOTA = (numNOTA / total) * 100;
 
+	return std::vector<double> {percentCorrect, percentIncorrect, percentNOTA};
+}
+
+// Calculate the average correct, incorrect, and none of the above across k folds
+std::vector<double> calculateSummary() {
+	double avgCorrect = 0, avgIncorrect = 0, avgNOTA = 0;
+
+	for (size_t i = 0; i < K_FOLDS; ++i) {
+		avgCorrect += predictionStatistics[i][0];
+		avgIncorrect += predictionStatistics[i][1];
+		avgNOTA += predictionStatistics[i][2];
+	}
+
+	return std::vector<double> {avgCorrect / K_FOLDS, avgIncorrect / K_FOLDS, avgNOTA / K_FOLDS};
+}
+
+// Print out summary of percentages correct, incorrect, and none of the above
+void printSummary(double percentCorrect, double percentIncorrect, double percentNOTA) {
 	std::cout << "\nSummary Statistics:\n";
 	std::cout << std::setprecision(2) << std::fixed;
 	std::cout << "Correct: " << percentCorrect << "%\n";
@@ -144,7 +193,7 @@ void printPredictionResults(const std::vector<ClassMember>& dataset,
 	std::cout << "None of the above: " << percentNOTA << "%\n";
 }
 
-void test(const std::vector<ClassMember>& dataset, double pvalueThreshold) {
+void test(const std::vector<ClassMember>& dataset, double pvalueThreshold, size_t fold) {
 	std::vector<ClassMember> normalizedDataset = normalize(dataset);	
 	
 	// Find the nearest neighbor distance to each class
@@ -195,5 +244,18 @@ void test(const std::vector<ClassMember>& dataset, double pvalueThreshold) {
 		t.join();
 	}
 
-	printPredictionResults(dataset, pvalues, pvalueThreshold);
+	// Print out the p values for each datapoint
+	printPValues(dataset, pvalues);
+
+	// Calculate the percentage of datapoints predicted correctly, incorrectly, or as none of the above
+	std::vector<double> stats = calculateStatistics(dataset, pvalues, pvalueThreshold);
+	for (size_t i = 0; i < 3; ++i) {
+		predictionStatistics[fold][i] = stats[i];
+	}
+
+	// Print out statistics if this is the last fold
+	if (fold == K_FOLDS - 1) {
+		std::vector<double> summary = calculateSummary();
+		printSummary(summary[0], summary[1], summary[2]);
+	}
 }

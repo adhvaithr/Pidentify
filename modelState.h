@@ -2,6 +2,7 @@
 #define MODELSTATE_H
 
 #include <vector>
+#include <array>
 #include <unordered_map>
 #include <string>
 #include <mutex>
@@ -20,5 +21,9 @@ extern ModelState MODEL_STATE;
 extern std::mutex m;
 
 extern double NUM_THREADS;
+
+extern int K_FOLDS;
+
+extern std::vector<std::array<double, 3> > predictionStatistics;
 
 #endif
