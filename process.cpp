@@ -6,8 +6,11 @@
 #include <cassert>
 #include <unordered_map>
 #include <algorithm>
+#include <iterator>
+#include <thread>
 
 #include "classMember.h"
+#include "modelState.h"
 
 void normalizeFeatures(std::vector<ClassMember>& dataset) {
     if (dataset.empty()) {
@@ -23,7 +26,7 @@ void normalizeFeatures(std::vector<ClassMember>& dataset) {
     for (const auto& obj : dataset) {
         if (obj.features.size() != numFeatures) {
             fprintf(stderr, "Inconsistent feature size: %zu != %zu\n", obj.features.size(), numFeatures);
-            return;
+            std::exit(0);
         }
         for (size_t i = 0; i < numFeatures; ++i) {
             means[i] += obj.features[i];
@@ -45,18 +48,21 @@ void normalizeFeatures(std::vector<ClassMember>& dataset) {
         sigma = std::sqrt(sigma / dataset.size());
         if (sigma == 0) {
             std::cerr << "Standard deviation is zero for feature index " << (&sigma - &sigmas[0]) << std::endl;
-            return;
+            std::exit(0);
         }
     }
 
-    // Normalize the dataset
     for (auto& obj : dataset) {
-        for (size_t i = 0; i < numFeatures; ++i) {
+        for (size_t i = 0; i < dataset[0].features.size(); ++i) {
             obj.features[i] = (obj.features[i] - means[i]) / sigmas[i];
         }
     }
-}
 
+    // Save means and standard deviations used for standardization
+    MODEL_STATE.means = std::move(means);
+    MODEL_STATE.sigmas = std::move(sigmas);
+
+}
 
 double euclideanDistance(const std::vector<double>& a, const std::vector<double>& b) {
     double sum = 0.0;
@@ -66,53 +72,77 @@ double euclideanDistance(const std::vector<double>& a, const std::vector<double>
     return std::sqrt(sum);
 }
 
-
-std::vector<double> computeNearestNeighborDistances(const std::vector<ClassMember>& dataset) {
-    std::unordered_map<std::string, std::vector<ClassMember> > classMap;
-    std::vector<double> distances;
-    
-    // Group dataset by species
-    for (const auto& obj : dataset) {
-        classMap[obj.name].push_back(obj);
-    }
-    
-    // Compute nearest neighbor distances for each class
-    for (const auto& pair : classMap) {
-        const auto& classData = pair.second;
-
-        for (const auto& obj : classData) {
-            double minDistance = std::numeric_limits<double>::max();
-            for (const auto& neighbor : classData) {
-                if (&obj != &neighbor) {
-                    double distance = euclideanDistance(obj.features, neighbor.features);
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                    }
+void computeNearestNeighborDistances(const std::unordered_map<std::string, std::vector<ClassMember> >& classMap,
+    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className) {
+    for (const auto& obj : classMap.at(className)) {
+        double minDistance = std::numeric_limits<double>::max();
+        for (const auto& neighbor : classMap.at(className)) {
+            if (&obj != &neighbor) {
+                double distance = euclideanDistance(obj.features, neighbor.features);
+                if (distance < minDistance) {
+                    minDistance = distance;
                 }
             }
-            // if the result of distance is bigger than 1, it will be dropped.
-            if (minDistance <= 1) {
-                distances.push_back(minDistance);
-            }
+        }
+        // If the nearest neighbor distance is greater than 1, drop the datapoint
+        if (minDistance <= 1) {
+            m.lock();
+            classNNDistMap[className].push_back(minDistance);
+            m.unlock();
         }
     }
-
-    return distances;
 }
 
-std::vector<double> process(std::vector<ClassMember> dataset){
+std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassMember> dataset) {
 
     // normalize features
     normalizeFeatures(dataset);
 
-    // computer k nearest distance, k = 1
-    std::vector<double> distances = computeNearestNeighborDistances(dataset);
+    // Group dataset by class
+    std::unordered_map<std::string, std::vector<ClassMember> > classMap;
+    for (const auto& obj : dataset) {
+        classMap[obj.name].push_back(obj);
+    }
+
+    // compute k nearest distance, k = 1
+    std::unordered_map<std::string, std::vector<double> > classNNDistMap;
+    std::vector<std::thread> threads;
+    
+    for (const auto& pair : classMap) {
+        std::thread t(computeNearestNeighborDistances, std::cref(classMap), std::ref(classNNDistMap), pair.first);
+        threads.push_back(std::move(t));
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    // Check if a class has no datapoints that are within a distance of 1 from each other
+    std::vector<std::string> invalidClasses;
+    for (const auto& pair : classMap) {
+        if (classNNDistMap.find(pair.first) == classNNDistMap.end()) {
+            invalidClasses.push_back(pair.first);
+        }
+    }
+
+    if (invalidClasses.size() > 0) {
+        std::cout << "Unable to perform curve fitting for all classes.\n";
+        std::cout << "Nearest neighbor distances are greater than 1 for these classes: ";
+        std::copy(invalidClasses.begin(), invalidClasses.end(), std::ostream_iterator<std::string>(std::cout, ", "));
+        std::cout << std::endl;
+        std::exit(0);
+    }
+
+    // Save all datapoints for each class
+    MODEL_STATE.classMap = std::move(classMap);
 
     // sort distances in ascending order
-    std::sort(distances.begin(), distances.end());
+    for (auto& pair : classNNDistMap) {
+        std::sort(pair.second.begin(), pair.second.end());
 
-    // eliminate duplicated results
-    distances.erase(unique(distances.begin(), distances.end()),distances.end());
+        // eliminate duplicated results
+        pair.second.erase(unique(pair.second.begin(), pair.second.end()), pair.second.end());
+    }
 
-    return distances;
+    return classNNDistMap;
 }

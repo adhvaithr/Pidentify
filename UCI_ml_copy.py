@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+from scipy.io import arff
 
 # local file paths to test with
 # test/ datasets/wine\ quality/winequality-red.csv
@@ -97,6 +98,11 @@ def read_file(file_obj: DataFile) -> pd.DataFrame:
         elif file_obj.file_type in [".xlsx"]:
             # TODO: Make sure headers work properly with Excel files.
             return process_header(file_obj, pd.read_excel(file_obj.file_path))
+        elif file_obj.file_type in [".arff"]:
+            data, info = arff.loadarff(file_obj.file_path)
+            df =  pd.DataFrame(data)
+            df = df.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
+            return process_header(file_obj, df)
         else:
             # Confirmed to work with .txt, .arff, and .dat file extensions
             return process_header(file_obj, pd.read_table(file_obj.file_path, header=None, sep=None, engine='python'))
@@ -242,7 +248,7 @@ def _convert_non_num_to_na(entry):
         try:
             float(entry)
         except ValueError:
-            return np.NaN
+            return np.nan
         return entry
 
 
