@@ -11,6 +11,7 @@
 #include <iterator>
 #include <thread>
 #include <cassert>
+#include <ap.h>
 
 #include "classMember.h"
 #include "process.h"
@@ -112,6 +113,16 @@ std::vector<ClassMember> normalize(std::vector<ClassMember> dataset) {
 	}
 
 	return dataset;
+}
+
+// Project test dataset into lower dimension subspace
+void toPCASubspace(std::vector<ClassMember>& dataset) {
+	alglib::real_2d_array datapoints, principalComponents;
+	datapoints.setlength(dataset.size(), dataset[0].features.size());
+	principalComponents.setlength(dataset.size(), MODEL_STATE.principalAxes.cols());
+	copyDatapoints(dataset, datapoints, true);
+	projectOntoPrincipalAxes(datapoints, MODEL_STATE.principalAxes, principalComponents);
+	copyDatapoints(dataset, principalComponents, false);
 }
 
 // Calculate the minimum distance between the datapoints in the test set with each class
@@ -280,6 +291,7 @@ void printSummary(const std::unordered_map<std::string, double[5]>& predictionSt
 }
 
 void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics, size_t fold, double pvalueThreshold) {
+	// Create p value thresholds if none are provided by the user
 	std::vector<double> pvalueThresholds;
 	bool userPValueThreshold;
 	if (pvalueThreshold == std::numeric_limits<double>::lowest()) {
@@ -293,6 +305,8 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 	}
 	
 	std::vector<ClassMember> normalizedDataset = normalize(dataset);
+
+	toPCASubspace(normalizedDataset);
 
 	// Find the nearest neighbor distance to each class
 	std::vector<std::unordered_map<std::string, double> > nnDistances(normalizedDataset.size());
