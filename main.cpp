@@ -23,7 +23,6 @@ ModelState MODEL_STATE;
 std::mutex m;
 double NUM_THREADS;
 int K_FOLDS = 10;
-std::vector<std::array<double, 3> > predictionStatistics(K_FOLDS);
 
 /*Read dataset from custom formatted file where columns are in the following order:
 class name, numerical features, nonnumerical features (if any).*/
@@ -70,30 +69,42 @@ void setThreads() {
 }
 
 bool isNonnegativeDouble(char* value) {
+    size_t decimalPointCount = 0;
     for (size_t i = 0; i < std::strlen(value); ++i) {
-        if (!isdigit(value[i]) && value[i] != '.') {
-            return false;
+        if (!isdigit(value[i])) {
+            if (value[i] == '.' && decimalPointCount == 0) {
+                ++decimalPointCount;
+            }
+            else {
+                return false;
+            }
         }
     }
     return true;
 }
 
 int main(int argc, char* argv[]) {
-    // Error checking on command line arguments
-    if (argc < 3) {
+    // Command line arguments can optionally include the p value threshold
+    double pvalueThreshold;
+    std::string datasetFilename;
+    if (argc == 2) {
+        pvalueThreshold = -1;
+        datasetFilename = argv[1];
+    }
+    else if (argc == 3) {
+        if (!isNonnegativeDouble(argv[1])) {
+            std::cout << "pvalueThreshold must be nonnegative double.\n";
+            return 0;
+        }
+        pvalueThreshold = std::atof(argv[1]);
+        datasetFilename = argv[2];
+    }
+    else {
         std::cout << "Incorrect number of command line arguments passed.\n";
-        std::cout << "Format: executable pvalueThreshold datasetFilepath\n";
+        std::cout << "Format: executable [pvalueThreshold] datasetFilepath\n";
         std::cout << "Example: ./cpv.exe 0.50 filename.csv\n";
         return 0;
     }
-    
-    if (!isNonnegativeDouble(argv[1])) {
-        std::cout << "pvalueThreshold must be nonnegative double.\n";
-        return 0;
-    }
-
-    double pvalueThreshold = std::atof(argv[1]);
-    std::string datasetFilename = argv[2];
 
     std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
 
@@ -101,6 +112,8 @@ int main(int argc, char* argv[]) {
     kFoldSplit(dataset, kSets);
 
     setThreads();
+
+    std::unordered_map<std::string, double[5]> predictionStatistics;
 
     for (int i = 0; i < K_FOLDS; ++i) {
         std::vector<ClassMember> trainDataset;
@@ -118,6 +131,11 @@ int main(int argc, char* argv[]) {
 
         fitClasses(sorted_distances);
 
-        test(kSets[i], pvalueThreshold, i);
+        if (pvalueThreshold == -1) {
+            test(kSets[i], predictionStatistics, i);
+        }
+        else {
+            test(kSets[i], predictionStatistics, i, pvalueThreshold);
+        }
     }
 }

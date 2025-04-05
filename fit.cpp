@@ -11,6 +11,8 @@
 
 using namespace alglib;
 
+const double PI = 2 * acos(0);
+
 // helper function secant
 double sech(double x) {
     return 1.0 / std::cosh(x);
@@ -52,7 +54,7 @@ void hyperbolic_fd(const real_1d_array &c, const real_1d_array &x, double &func,
 // arctangent function
 double arctangent(double k, double alpha, double x)
 {
-    return (atan(k * (x - alpha)) + 1) / 2;
+    return (atan(k * (x - alpha)) + PI / 2) / PI;
 }
 
 void arctangent_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
@@ -63,14 +65,14 @@ void arctangent_f(const real_1d_array &c, const real_1d_array &x, double &func, 
 void arctangent_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
     func = 1 - arctangent(c[0], c[1], x[0]);
-    grad[0] = - ((x[0] - c[1]) / (2 * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)));
-    grad[1] =  - (c[0] / (2 * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)));
+    grad[0] = - ((x[0] - c[1]) / (PI * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)));
+    grad[1] =  c[0] / (PI * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1));
 }
 
 // gudermannian function
 double gudermannian(double k, double alpha, double x)
 {
-    return ((2 * atan(tanh(k * (x - alpha)/ 2))) + 1) / 2;
+    return ((2 * atan(tanh(k * (x - alpha)/ 2))) + PI / 2) / PI;
 }
 
 void gudermannian_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
@@ -81,8 +83,8 @@ void gudermannian_f(const real_1d_array &c, const real_1d_array &x, double &func
 void gudermannian_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
     func = 1 - gudermannian(c[0], c[1], x[0]);
-    grad[0] = -((x[0] - c[1]) * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1]))) / (2 * ((tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1)));
-    grad[1] = c[0] * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1])) / (2 * (tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1));
+    grad[0] = -((x[0] - c[1]) * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1]))) / (PI * ((tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1)));
+    grad[1] = c[0] * sech(1/2 * c[0] * (x[0] - c[1])) * sech(1/2 * c[0] * (x[0] - c[1])) / (PI * (tanh(1/2 * c[0] * (x[0] - c[1])) * tanh(1/2 * c[0] * (x[0] - c[1])) + 1));
 }
 
 // simple algebraic function
@@ -103,6 +105,44 @@ void algebraic_fd(const real_1d_array &c, const real_1d_array &x, double &func, 
     grad[0] = - ((x[0] - c[1]) / (2 * (sqrt((c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)))));
     grad[1] = - (c[0] / (2 * (sqrt((c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)))));
 }
+
+
+double erf_sigmoid(double k, double alpha, double x) {
+    // Compute z = k * (x - alpha)
+    double z = k * (x - alpha);
+    // Sigmoid: 0.5 * (1 + erf(z))
+    return 0.5 * (1 + erf(z));
+}
+
+// Function evaluation wrapper for ALGLIB.
+// Our fitting function is defined as: f(x) = 1 - erf_sigmoid(k, alpha, x)
+void erf_sigmoid_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr) {
+    func = 1 - erf_sigmoid(c[0], c[1], x[0]);
+}
+
+// Derivative (gradient) evaluation for ALGLIB.
+void erf_sigmoid_fd(const real_1d_array &c, const real_1d_array &x, 
+                    double &func, real_1d_array &grad, void *ptr) {
+    double k = c[0];
+    double alpha = c[1];
+    double z = k * (x[0] - alpha);
+    
+    // Compute the sigmoid value using erf.
+    double g = 0.5 * (1 + erf(z));
+    // Our fitting function is f(x) = 1 - g(x) = 0.5 * (1 - erf(z))
+    func = 1 - g;
+    
+    // The derivative of erf(z) is (2/sqrt(pi)) * exp(-z^2)
+    // So the derivative of f w.r.t z is: df/dz = - (1/sqrt(pi)) * exp(-z*z)
+    double common_deriv = - exp(-z*z) / sqrt(PI); // PI is defined as 2*acos(0)
+    
+    // Using chain rule:
+    // dz/dk = (x - alpha) and dz/dalpha = -k
+    grad.setlength(2);
+    grad[0] = common_deriv * (x[0] - alpha);  // Partial derivative w.r.t. k
+    grad[1] = common_deriv * (-k);            // Partial derivative w.r.t. alpha
+}
+
 
 
 void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_values, std::string className)
@@ -145,7 +185,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     //printf("%d\n", int(rep.terminationtype));  // status code
 
     // print out the fitting procedure
-    /*for (int i = 0; i < y.size(); i++){
+    /*for (int i = 0; i < y.length(); i++) {
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - logistic(c[0], c[1], x[i][0]));
     }*/
 
@@ -161,7 +201,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     /*for (int i = 0; i < y.length(); i++) {
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - hyperbolic_tangent(c[0], c[1], x[i][0]));
     }*/
-
+    
     // nonlinear square curve fitting for arctangent function
     lsfitcreatewfg(x, y, w, c, state);
     lsfitsetcond(state, epsx, maxits);
@@ -174,7 +214,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     /*for (int i = 0; i < y.size(); i++){
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - arctangent(c[0], c[1], x[i][0]));
     }*/
-
+    
     // nonlinear square curve fitting for Gudermannian function
     lsfitcreatewfg(x, y, w, c, state);
     lsfitsetcond(state, epsx, maxits);
@@ -187,7 +227,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     /*for (int i = 0; i < y.size(); i++){
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - gudermannian(c[0], c[1], x[i][0]));
     }*/
-        
+    
     // nonlinear square curve fitting for simple algebraic function
     lsfitcreatewfg(x, y, w, c, state);
     lsfitsetcond(state, epsx, maxits);
@@ -200,6 +240,14 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     /*for (int i = 0; i < y.size(); i++){
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - algebraic(c[0], c[1], x[i][0]));
     }*/
+
+    // Nonlinear squares curve fitting for error function based sigmoid
+    lsfitcreatewfg(x, y, w, c, state);
+    lsfitsetcond(state, epsx, maxits);
+    lsfitfit(state, erf_sigmoid_f, erf_sigmoid_fd);
+    lsfitresults(state, c, rep);
+    results.push_back({c, "error function based sigmoid", rep.wrmserror});
+
 
     m.lock();
     std::cout << "Curve fitting for class \"" << className << "\":\n";
@@ -245,7 +293,7 @@ int fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_dis
         y[0] = 1;
         pair.second.insert(pair.second.end(), 1);
         y[l + 1] = 0;
-
+        
         std::packaged_task<void(std::vector<double>, std::vector<double>, std::string)> parallelCurveFitting{ curveFitting };
         results[pair.first] = parallelCurveFitting.get_future();
         threads[pair.first] = std::thread{ std::move(parallelCurveFitting), pair.second, y, pair.first };
