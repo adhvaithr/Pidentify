@@ -170,12 +170,12 @@ void computeNearestNeighborDistances(const std::unordered_map<std::string, std::
                 }
             }
         }
-        // If the nearest neighbor distance is greater than 1, drop the datapoint
-        if (minDistance <= 1) {
-            m.lock();
-            classNNDistMap[className].push_back(minDistance);
-            m.unlock();
-        }
+
+        // Record neirest neighbor distance
+        m.lock();
+        classNNDistMap[className].push_back(minDistance);
+        m.unlock();
+        
     }
 }
 
@@ -205,20 +205,22 @@ std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassM
         t.join();
     }
 
-    // Check if a class has no datapoints that are within a distance of 1 from each other
-    std::vector<std::string> invalidClasses;
+    std::vector<std::string> warningClasses;
+
     for (const auto& pair : classMap) {
-        if (classNNDistMap.find(pair.first) == classNNDistMap.end()) {
-            invalidClasses.push_back(pair.first);
+        const auto& currClass = pair.first; 
+        auto distance_it = classNNDistMap.find(currClass);
+        const std::vector<double>& distances = distance_it->second;
+        double minDistance = *std::min_element(distances.begin(), distances.end());
+        if (minDistance > 1.0) {
+            warningClasses.push_back(currClass);
         }
     }
-
-    if (invalidClasses.size() > 0) {
-        std::cout << "Unable to perform curve fitting for all classes.\n";
+    if (warningClasses.size() > 0) {
         std::cout << "Nearest neighbor distances are greater than 1 for these classes: ";
-        std::copy(invalidClasses.begin(), invalidClasses.end(), std::ostream_iterator<std::string>(std::cout, ", "));
+        std::copy(warningClasses.begin(), warningClasses.end(), std::ostream_iterator<std::string>(std::cout, ", "));
         std::cout << std::endl;
-        std::exit(0);
+
     }
 
     // Save all datapoints for each class
