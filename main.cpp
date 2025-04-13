@@ -45,6 +45,7 @@ std::vector<ClassMember> readFormattedDataset(const std::string& filename) {
         numFeatures += 1;
     }
 
+    size_t lineNumber = 2;
     // Only add the numerical features to the ClassMember vector
     while (std::getline(file, line)) {
         std::stringstream ss(line);
@@ -55,7 +56,7 @@ std::vector<ClassMember> readFormattedDataset(const std::string& filename) {
             std::getline(ss, feature, ',');
             obj.features.push_back(std::stod(feature));
         }
-
+        obj.lineNumber = lineNumber++;
         dataset.push_back(obj);
     }
     file.close();
@@ -84,33 +85,47 @@ bool isNonnegativeDouble(char* value) {
 }
 
 int main(int argc, char* argv[]) {
-    // Command line arguments can optionally include the p value threshold
-    double pvalueThreshold;
-    std::string datasetFilename;
-    if (argc == 2) {
-        pvalueThreshold = -1;
-        datasetFilename = argv[1];
-    }
-    else if (argc == 3) {
-        if (!isNonnegativeDouble(argv[1])) {
-            std::cout << "pvalueThreshold must be nonnegative double.\n";
+    // Command line arguments can optionally include the p value threshold and write p values to a CSV    
+    double pvalueThreshold = -1;
+    bool pValuesToCSV = false;
+    std::string datasetFilename, pValuesCSVFilename;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--pvalues_to_csv") == 0) {
+            pValuesToCSV = true;
+            ++i;
+            if (i < argc - 1)
+                pValuesCSVFilename = argv[i];
+            else {
+                std::cerr << "ERROR: Filename to write p values to was not provided.\n";
+                return 0;
+            }
+        }
+        else if (std::strcmp(argv[i], "-H") == 0) {
+            std::cout << "Format: executable [--pvalues_to_csv filename] [pvalueThreshold] datasetFilepath\n";
+            std::cout << "Example: ./cpv.exe --pvalues_to_csv result.csv 0.50 dataset.csv\n";
             return 0;
         }
-        pvalueThreshold = std::atof(argv[1]);
-        datasetFilename = argv[2];
+        else if (i == argc - 2) {
+            if (!isNonnegativeDouble(argv[i])) {
+                std::cerr << "ERROR: pvalueThreshold must be nonnegative double.\n";
+                return 0;
+            }
+            pvalueThreshold = std::atof(argv[i]);
+        }
+        else
+            datasetFilename = argv[i];
     }
-    else {
-        std::cout << "Incorrect number of command line arguments passed.\n";
-        std::cout << "Format: executable [pvalueThreshold] datasetFilepath\n";
-        std::cout << "Example: ./cpv.exe 0.50 filename.csv\n";
+
+    if (datasetFilename == "") {
+        std::cerr << "ERROR: No dataset provided.\n";
         return 0;
     }
-
+    
     std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
-
+    
     std::vector<ClassMember> kSets[K_FOLDS];
     kFoldSplit(dataset, kSets);
-
+    
     setThreads();
 
     std::unordered_map<std::string, double[5]> predictionStatistics;
@@ -131,11 +146,6 @@ int main(int argc, char* argv[]) {
 
         fitClasses(sorted_distances);
 
-        if (pvalueThreshold == -1) {
-            test(kSets[i], predictionStatistics, i);
-        }
-        else {
-            test(kSets[i], predictionStatistics, i, pvalueThreshold);
-        }
+        test(kSets[i], predictionStatistics, i, pvalueThreshold, pValuesToCSV, pValuesCSVFilename);
     }
 }

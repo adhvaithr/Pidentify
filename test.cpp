@@ -18,6 +18,7 @@
 #include "modelState.h"
 #include "fit.h"
 #include "test.h"
+#include "CSVWrite.hpp"
 
 // Helper function to fill the k sets to a certain amount per set
 void fillFoldToLimit(std::uniform_int_distribution<>& distrib, std::mt19937& gen, int fillLimit,
@@ -198,6 +199,34 @@ void printPValues(const std::vector<ClassMember>& dataset, const std::vector<std
 	}
 }
 
+// Write the p values for each datapoint in the test set to a CSV file
+void writePValuesToCSV(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
+	const std::string& filename, size_t fold) {
+	size_t totalDatapoints = pvalues.size();
+	std::vector<std::string> header, classNames(pvalues[0].size());
+	std::vector<std::vector<double> > rows(totalDatapoints);
+	std::transform(pvalues[0].begin(), pvalues[0].end(), classNames.begin(),
+		[](const std::pair<std::string, double>& pair) {
+			return pair.first;
+		});
+	std::sort(classNames.begin(), classNames.end());
+
+	// Create a header if this is the first time writing to the CSV file
+	if (fold == 0) {
+		header.emplace_back("lineNumber");
+		header.insert(header.begin() + 1, classNames.begin(), classNames.end());
+	}
+	
+	for (size_t i = 0; i < totalDatapoints; ++i) {
+		rows[i].push_back(dataset[i].lineNumber);
+		for (const std::string& className : classNames) {
+			rows[i].push_back(pvalues[i].at(className));
+		}
+	}
+
+	writeToCSV(header, rows, filename);
+}
+
 // Calculate the percentage predicted correctly, incorrectly, and as none of the above, and the average number of classes per
 // datapoint that are over the p value threshold
 void calculateStatistics(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
@@ -290,11 +319,12 @@ void printSummary(const std::unordered_map<std::string, double[5]>& predictionSt
 	}
 }
 
-void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics, size_t fold, double pvalueThreshold) {
+void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics,
+	size_t fold, double pvalueThreshold, bool pValuesToCSV, const std::string& pValuesCSVFilename) {
 	// Create p value thresholds if none are provided by the user
 	std::vector<double> pvalueThresholds;
 	bool userPValueThreshold;
-	if (pvalueThreshold == std::numeric_limits<double>::lowest()) {
+	if (pvalueThreshold == -1) {
 		pvalueThresholds = createPValueThresholds(predictionStatistics);
 		userPValueThreshold = false;
 	}
@@ -332,7 +362,7 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 	for (auto& t : threads) {
 		t.join();
 	}
-
+	
 	// Calculate the p value for each class
 	std::vector<std::unordered_map<std::string, double> > pvalues(nnDistances.size());
 	threads.clear();
@@ -355,9 +385,11 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 	for (auto& t : threads) {
 		t.join();
 	}
-
-	// Print out the p values for each datapoint
+	
 	printPValues(dataset, pvalues);
+	if (pValuesToCSV) {
+		writePValuesToCSV(dataset, pvalues, pValuesCSVFilename, fold);
+	}
 
 	// Calculate the percentage of datapoints predicted correctly, incorrectly, or as none of the above
 	calculateStatistics(dataset, pvalues, pvalueThresholds, predictionStatistics, userPValueThreshold);
