@@ -12,6 +12,7 @@ class Dataset:
     """
     datafiles: list[DataFile]
     merge_files: dict[str: list[DataFile]]
+    merge_on: dict[str: list[str]]
     delay_write: bool
     _logger: logging.Logger
     _success: bool = True
@@ -25,7 +26,10 @@ class Dataset:
         loaded_dfs = []
         for datafile in self.datafiles:
             try:
-                if datafile.file_path in self.merge_files:
+                if datafile.file_path in self.merge_files and datafile.file_path in self.merge_on:
+                    df = datafile.process_file(*self.merge_files[datafile.file_path], merge=True,
+                                               merge_on=self.merge_on[datafile.file_path])
+                elif datafile.file_path in self.merge_files:
                     df = datafile.process_file(*self.merge_files[datafile.file_path], merge=True)
                 else:
                     df = datafile.process_file()
