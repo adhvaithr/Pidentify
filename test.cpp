@@ -131,7 +131,7 @@ std::vector<ClassMember> standardize(std::vector<ClassMember> dataset) {
 			std::exit(0);
 		}
 		for (size_t i = 0; i < numFeatures; ++i) {
-			obj.features[i] = (obj.features[i] - MODEL_STATE.means[i]) / MODEL_STATE.sigmas[i];
+			obj.features[i] = (obj.features[i] - MODEL_STATE.featureMeans[i]) / MODEL_STATE.minRadius;
 		}
 	}
 
