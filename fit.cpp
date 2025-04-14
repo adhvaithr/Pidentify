@@ -138,7 +138,6 @@ void erf_sigmoid_fd(const real_1d_array &c, const real_1d_array &x,
     
     // Using chain rule:
     // dz/dk = (x - alpha) and dz/dalpha = -k
-    grad.setlength(2);
     grad[0] = common_deriv * (x[0] - alpha);  // Partial derivative w.r.t. k
     grad[1] = common_deriv * (-k);            // Partial derivative w.r.t. alpha
 }
@@ -247,7 +246,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     lsfitfit(state, erf_sigmoid_f, erf_sigmoid_fd);
     lsfitresults(state, c, rep);
     results.push_back({c, "error function based sigmoid", rep.wrmserror});
-
+    
 
     m.lock();
     std::cout << "Curve fitting for class \"" << className << "\":\n";

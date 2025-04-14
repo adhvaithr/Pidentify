@@ -11,7 +11,6 @@
 #include <iterator>
 #include <thread>
 #include <cassert>
-#include <ap.h>
 
 #include "classMember.h"
 #include "process.h"
@@ -97,11 +96,7 @@ std::vector<double> createPValueThresholds(std::unordered_map<std::string, doubl
 	return pvalueThresholds;
 }
 
-// Normalize the feature values of the test set with the means and sigmas calculated during training
 std::vector<ClassMember> normalize(std::vector<ClassMember> dataset) {
-	if (!MODEL_STATE.zeroStdDeviation.empty()) {
-		removeFeatures(MODEL_STATE.zeroStdDeviation, dataset);
-	}
 	size_t numFeatures = dataset[0].features.size();
 	for (auto& obj : dataset) {
 		if (obj.features.size() != numFeatures) {
@@ -109,21 +104,11 @@ std::vector<ClassMember> normalize(std::vector<ClassMember> dataset) {
 			std::exit(0);
 		}
 		for (size_t i = 0; i < numFeatures; ++i) {
-			obj.features[i] = (obj.features[i] - MODEL_STATE.means[i]) / MODEL_STATE.sigmas[i];
+			obj.features[i] = (obj.features[i] - MODEL_STATE.featureMeans[i]) / MODEL_STATE.minRadius;
 		}
 	}
 
 	return dataset;
-}
-
-// Project test dataset into lower dimension subspace
-void toPCASubspace(std::vector<ClassMember>& dataset) {
-	alglib::real_2d_array datapoints, principalComponents;
-	datapoints.setlength(dataset.size(), dataset[0].features.size());
-	principalComponents.setlength(dataset.size(), MODEL_STATE.principalAxes.cols());
-	copyDatapoints(dataset, datapoints, true);
-	projectOntoPrincipalAxes(datapoints, MODEL_STATE.principalAxes, principalComponents);
-	copyDatapoints(dataset, principalComponents, false);
 }
 
 // Calculate the minimum distance between the datapoints in the test set with each class
@@ -167,6 +152,9 @@ void calculatePValues(const std::vector<std::unordered_map<std::string, double> 
 			}
 			else if (bestFitFunction == "gudermannian function") {
 				pvalue = 1 - gudermannian(c, a, pair.second);
+			}
+			else if (bestFitFunction == "error function based sigmoid") {
+				pvalue = 1 - erf_sigmoid(c, a, pair.second);
 			}
 			else {
 				pvalue = 1 - algebraic(c, a, pair.second);
@@ -335,8 +323,6 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 	}
 	
 	std::vector<ClassMember> normalizedDataset = normalize(dataset);
-
-	toPCASubspace(normalizedDataset);
 
 	// Find the nearest neighbor distance to each class
 	std::vector<std::unordered_map<std::string, double> > nnDistances(normalizedDataset.size());

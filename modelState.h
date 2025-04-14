@@ -11,10 +11,8 @@
 #include "fit.h"
 
 struct ModelState {
-	std::vector<double> means;
-	std::vector<double> sigmas;
-	std::vector<size_t> zeroStdDeviation;
-	alglib::real_2d_array principalAxes;
+	std::vector<double> featureMeans;
+	double minRadius;
 	std::unordered_map<std::string, std::vector<ClassMember> > classMap;
 	std::unordered_map<std::string, FitResult> bestFit;
 };
