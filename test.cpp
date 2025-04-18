@@ -544,6 +544,11 @@ std::vector<std::pair<std::string, std::string> > calculateStatistics(const std:
 	std::vector<std::pair<std::string, std::string> > classifications(total);
 	double pvalueThreshold;
 
+    std::unordered_map<std::string, std::vector<double>> numCorrectPerClass;
+    std::unordered_map<std::string, std::vector<double>> numIncorrectPerClass;
+    std::unordered_map<std::string, std::vector<double>> numNOTAPerClass;
+    std::set<std::string> seenClasses = {};
+    std::unordered_map<std::string, double> newInstancesPerClass;
 	for (size_t i = 0; i < total; ++i) {
 		std::string expectedClass = dataset[i].name;
 
@@ -558,6 +563,17 @@ std::vector<std::pair<std::string, std::string> > calculateStatistics(const std:
 		}
 
 		// Find the largest p value for the datapoint
+        const std::string& expectedClass = dataset[i].name;
+        if (seenClasses.find(expectedClass) == seenClasses.end()) {
+            numCorrectPerClass[expectedClass] = std::vector<double>(numThresholds, 0);
+            numIncorrectPerClass[expectedClass] = std::vector<double>(numThresholds, 0);
+            numNOTAPerClass[expectedClass] = std::vector<double>(numThresholds, 0);
+            seenClasses.insert(expectedClass);
+        }
+       
+        numInstancesPerClass[expectedClass]+=1;
+        newInstancesPerClass[expectedClass]+=1;
+        
 		auto largestPValue = std::max_element(pvalues[i].begin(), pvalues[i].end(), [](const std::pair<std::string, double>& p1, const std::pair<std::string, double>& p2) {
 			return p1.second < p2.second;
 			});
@@ -844,6 +860,7 @@ void printPredCategoriesPerClass(double* confusionMatrix, double precision) {
 	std::cout << "Precision: " << std::setprecision(2) << std::fixed << precision << "%\n\n";
 	std::cout << std::setprecision(defaultPrecision);
 	std::cout.unsetf(std::ios::fixed);
+    std::cout << "==========================" << std::endl;
 }
 
 void printPredCategoriesAllClasses(std::unordered_map<std::string, double[4]>& confusionMatrices,
