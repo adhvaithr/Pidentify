@@ -11,6 +11,7 @@
 #include <iterator>
 #include <thread>
 #include <cassert>
+#include <set>
 
 #include "classMember.h"
 #include "process.h"
@@ -214,17 +215,36 @@ void writePValuesToCSV(const std::vector<ClassMember>& dataset, const std::vecto
 
 	writeToCSV(header, rows, filename);
 }
-
+ 
 // Calculate the percentage predicted correctly, incorrectly, and as none of the above, and the average number of classes per
 // datapoint that are over the p value threshold
 void calculateStatistics(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
-	const std::vector<double>& pvalueThresholds, std::unordered_map<std::string, double[5]>& predictionStatistics, bool userPValueThreshold) {
+	const std::vector<double>& pvalueThresholds, std::unordered_map<std::string, double[5]>& predictionStatistics, 
+    std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass, std::unordered_map<std::string, double>& numInstancesPerClass,
+    bool userPValueThreshold) {
+
 	size_t total = dataset.size(), numThresholds = pvalueThresholds.size();
 	std::vector<double> numCorrect(numThresholds, 0), numIncorrect(numThresholds, 0), numNOTA(numThresholds, 0),
 		classesOverThreshold(numThresholds, 0);
 
+    std::unordered_map<std::string, std::vector<double>> numCorrectPerClass;
+    std::unordered_map<std::string, std::vector<double>> numIncorrectPerClass;
+    std::unordered_map<std::string, std::vector<double>> numNOTAPerClass;
+    std::set<std::string> seenClasses = {};
+    std::unordered_map<std::string, double> newInstancesPerClass;
 	for (size_t i = 0; i < total; ++i) {
 		// Find the largest p value for the datapoint
+        const std::string& expectedClass = dataset[i].name;
+        if (seenClasses.find(expectedClass) == seenClasses.end()) {
+            numCorrectPerClass[expectedClass] = std::vector<double>(numThresholds, 0);
+            numIncorrectPerClass[expectedClass] = std::vector<double>(numThresholds, 0);
+            numNOTAPerClass[expectedClass] = std::vector<double>(numThresholds, 0);
+            seenClasses.insert(expectedClass);
+        }
+       
+        numInstancesPerClass[expectedClass]+=1;
+        newInstancesPerClass[expectedClass]+=1;
+        
 		auto largestPValue = std::max_element(pvalues[i].begin(), pvalues[i].end(), [](const std::pair<std::string, double>& p1, const std::pair<std::string, double>& p2) {
 			return p1.second < p2.second;
 			});
@@ -232,10 +252,20 @@ void calculateStatistics(const std::vector<ClassMember>& dataset, const std::vec
 		for (size_t j = 0; j < numThresholds; ++j) {
 			// Tally whether the p value indicates the correct/incorrect class or none of the above (NOTA)
 			if (largestPValue->second >= pvalueThresholds[j]) {
-				if (largestPValue->first == dataset[i].name) { ++numCorrect[j]; }
-				else { ++numIncorrect[j]; }
-			}
-			else { ++numNOTA[j]; }
+              
+                if (largestPValue->first == expectedClass) {
+                    ++numCorrect[j];
+                    ++numCorrectPerClass[expectedClass][j];
+                }
+                else {
+                    ++numIncorrect[j];
+                    ++numIncorrectPerClass[expectedClass][j];
+                }
+            }
+            else {
+                ++numNOTA[j];
+                ++numNOTAPerClass[expectedClass][j];
+            }
 
 			// Count how many classes were over the p value threshold
 			for (const auto& pair : pvalues[i])
@@ -257,20 +287,42 @@ void calculateStatistics(const std::vector<ClassMember>& dataset, const std::vec
 		predictionStatistics[threshold][2] += (numCorrect[i] / total) * 100;
 		predictionStatistics[threshold][3] += (numIncorrect[i] / total) * 100;
 		predictionStatistics[threshold][4] += (numNOTA[i] / total) * 100;
+
+        /* Add class specific percentages for correct, incorrect, and NOTA predictions*/
+        for (const auto& currClass : newInstancesPerClass) {
+            const std::string& className = currClass.first;
+            double classCount = currClass.second;
+ 
+            std::string classKey = threshold + "|" + className;
+            // predictionStatisticsPerClass[classKey][0] = classKey;
+            predictionStatisticsPerClass[classKey][0] += (numCorrectPerClass[className][i] / classCount) * 100;
+            predictionStatisticsPerClass[classKey][1] += (numIncorrectPerClass[className][i] / classCount) * 100;
+            predictionStatisticsPerClass[classKey][2] += (numNOTAPerClass[className][i] / classCount) * 100;
+ 
+ 
+        }
 	}
 }
 
 // Calculate the average p value, classes over the p value threshold, correct, incorrect, and none of the above across k folds
-void calculateSummary(std::unordered_map<std::string, double[5]>& predictionStatistics) {
+void calculateSummary(std::unordered_map<std::string, double[5]>& predictionStatistics, std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass, int kFolds) {
 	for (auto& pair : predictionStatistics) {
-		for (int i = 0; i < 5; ++i)
-			pair.second[i] /= K_FOLDS;
+		for (double& val : pair.second) {
+			val /= kFolds;
+		}
+	}
+
+    for (auto& pair : predictionStatisticsPerClass) {
+		for (double& val : pair.second) {
+			val /= kFolds;
+		}
 	}
 }
 
+
 void printPredCategories(const double results[]) {
 	int defaultPrecision = std::cout.precision();
-
+    std::cout << "==========================" << std::endl;
 	std::cout << "Average number of classes over the p value threshold per datapoint: " << results[1] << std::endl;
 	std::cout << std::setprecision(2) << std::fixed;
 	std::cout << "Correct: " << results[2] << "%\n";
@@ -278,27 +330,58 @@ void printPredCategories(const double results[]) {
 	std::cout << "None of the above: " << results[4] << "%\n";
 	std::cout << std::setprecision(defaultPrecision);
 	std::cout.unsetf(std::ios::fixed);
+    std::cout << "==========================" << std::endl;
 }
 
+void printPredCategoriesPerClass(const double results[]) {
+    int defaultPrecision = std::cout.precision();
+    std::cout << "--------------------------" << std::endl;
+    std::cout << std::setprecision(2) << std::fixed;
+    std::cout << "Correct: " << results[0] << "%\n";
+    std::cout << "Incorrect: " << results[1] << "%\n";
+    std::cout << "None of the above: " << results[2] << "%\n";
+    std::cout << std::setprecision(defaultPrecision);
+    std::cout.unsetf(std::ios::fixed);
+    std::cout << "--------------------------" << std::endl;
+ }
+ 
+void printSummaryPerClass(const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass) {
+
+    for (auto& classStats : predictionStatisticsPerClass) {
+        std::cout << "\nSummary Statistics: for " << classStats.first << " \n";
+        printPredCategoriesPerClass(classStats.second);
+    }
+ }
+ 
 // Print out summary of percentages correct, incorrect, and none of the above, and the average number of classes over
 // the p value threshold when using p value threshold specified by the user
 void printSummary(const double statistics[]) {
+    std::cout << "--------------------------" << std::endl;
 	std::cout << "\nSummary Statistics:\n";
 	printPredCategories(statistics);
 }
 
+
 // Print out summary of percentages correct, incorrect, and none of the above, and the average number of classes over
 // the p value threshold when using default p value thresholds
-void printSummary(const std::unordered_map<std::string, double[5]>& predictionStatistics) {
+void printSummary(const std::unordered_map<std::string, double[5]>& predictionStatistics,
+   const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
+   std::vector<std::string>& classNames) {
+    std::cout << "--------------------------" << std::endl;
 	std::cout << "\nSummary Statistics (n is the greatest number of datapoints belonging to a class):\n";
 
 	std::string threshold;
 	for (int i = TOTAL_DYNAMIC_PVALUES - 1; i >= 0; --i) {
 		threshold = std::string("1/") + std::to_string(std::max(PVALUE_INCREMENT * i, 1.0)) + "n";
-		std::cout << "Average p value threshold: " << threshold << " = " << predictionStatistics.at(threshold)[0] << std::endl;
+		std::cout << "\nDynamic p value threshold: " << threshold << " = " << predictionStatistics.at(threshold)[0] << std::endl;
 		printPredCategories(predictionStatistics.at(threshold));
+        for (auto& currClass: classNames) {
+            std::string classKey = threshold + "|" + currClass;
+            printPredCategoriesPerClass(predictionStatisticsPerClass.at(classKey));
+        }
 	}
 
+    
 	std::vector<double> constantThresholds = CONSTANT_PVALUE_THRESHOLDS;
 	std::sort(constantThresholds.begin(), constantThresholds.end());
 	for (double constThreshold : constantThresholds) {
@@ -307,7 +390,16 @@ void printSummary(const std::unordered_map<std::string, double[5]>& predictionSt
 	}
 }
 
-void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics,
+void printClassCounts(const std::unordered_map<std::string, double>& classCounts) {
+    std::cout << "--------------------------" << std::endl;
+    std::cout << "Class Counts (Label: Number of Instances)" << std::endl;
+    for (const auto& item : classCounts) {
+        std::cout << item.first << ": " << item.second << std::endl;
+    }
+}
+
+void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics, std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
+    std::unordered_map<std::string, double>& numInstancesPerClass,
 	size_t fold, double pvalueThreshold, bool pValuesToCSV, const std::string& pValuesCSVFilename) {
 	// Create p value thresholds if none are provided by the user
 	std::vector<double> pvalueThresholds;
@@ -376,18 +468,25 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 	if (pValuesToCSV) {
 		writePValuesToCSV(dataset, pvalues, pValuesCSVFilename, fold);
 	}
-
 	// Calculate the percentage of datapoints predicted correctly, incorrectly, or as none of the above
-	calculateStatistics(dataset, pvalues, pvalueThresholds, predictionStatistics, userPValueThreshold);
+	calculateStatistics(dataset, pvalues, pvalueThresholds, 
+        predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, userPValueThreshold);
 
+    std::vector<std::string> classNames;
+    for (const auto& classItem : numInstancesPerClass) {
+        classNames.push_back(classItem.first);
+    }
+     
 	// Print out statistics if this is the last fold
 	if (fold == K_FOLDS - 1) {
-		calculateSummary(predictionStatistics);
+		calculateSummary(predictionStatistics, predictionStatisticsPerClass, K_FOLDS);
+        printClassCounts(numInstancesPerClass);
 		if (userPValueThreshold) {
 			printSummary(predictionStatistics[std::to_string(pvalueThreshold)]);
+            printSummaryPerClass(predictionStatisticsPerClass);
 		}
 		else {
-			printSummary(predictionStatistics);
+            printSummary(predictionStatistics, predictionStatisticsPerClass, classNames);
 		}
 	}
 }

@@ -129,6 +129,8 @@ int main(int argc, char* argv[]) {
     setThreads();
 
     std::unordered_map<std::string, double[5]> predictionStatistics;
+    std::unordered_map<std::string, double[3]> predictionStatisticsPerClass;
+    std::unordered_map<std::string, double> numInstancesPerClass;
 
     for (int i = 0; i < K_FOLDS; ++i) {
         std::vector<ClassMember> trainDataset;
@@ -146,6 +148,6 @@ int main(int argc, char* argv[]) {
 
         fitClasses(sorted_distances);
 
-        test(kSets[i], predictionStatistics, i, pvalueThreshold, pValuesToCSV, pValuesCSVFilename);
+        test(kSets[i], predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i, pvalueThreshold, pValuesToCSV, pValuesCSVFilename);
     }
 }
