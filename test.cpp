@@ -1027,6 +1027,11 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 		toPCASubspace(standardizedDataset);
 	}
 
+	
+	if (applyPCA && dataset[0].features.size() >= 3) {
+		toPCASubspace(normalizedDataset);
+	}
+
 	// Find the nearest neighbor distance to each class
 	std::vector<std::unordered_map<std::string, double> > nnDistances(standardizedDataset.size());
 
