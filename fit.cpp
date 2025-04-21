@@ -142,7 +142,22 @@ void erf_sigmoid_fd(const real_1d_array &c, const real_1d_array &x,
     grad[1] = common_deriv * (-k);            // Partial derivative w.r.t. alpha
 }
 
+void fitFunction(alglib::real_2d_array& x, alglib::real_1d_array& y, alglib::real_1d_array& w,
+    void (*inverse_f)(const alglib::real_1d_array&, const alglib::real_1d_array&, double&, void*),
+    void (*gradient_f) (const alglib::real_1d_array&, const alglib::real_1d_array&, double&, alglib::real_1d_array&, void*),
+    const std::string& functionName, std::vector<FitResult>& results) {
+    real_1d_array c = "[0.367, 0.45]"; // initial values for c & a in c(x-a)
+    double epsx = 0;
+    ae_int_t maxits = 0;
+    lsfitstate state;
+    lsfitreport rep;
 
+    lsfitcreatewfg(x, y, w, c, state);
+    lsfitsetcond(state, epsx, maxits);
+    alglib::lsfitfit(state, *inverse_f, *gradient_f);
+    lsfitresults(state, c, rep);
+    results.push_back({ c, functionName, rep.wrmserror });
+}
 
 void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_values, std::string className)
 {
@@ -167,20 +182,10 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     w.setlength(y_values.size());
     for(size_t i = 0; i < y_values.size(); i++) {
         w[i] = sorted_distances[i]*sorted_distances[i];
-    }
-
-    real_1d_array c = "[0.367, 0.45]"; // initial values for c & a in c(x-a)
-    double epsx = 0;
-    ae_int_t maxits = 0;
-    lsfitstate state;
-    lsfitreport rep;
+    }    
 
     // nonlinear square curve fitting for logistic function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, logistic_f, logistic_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "Logistic function", rep.wrmserror});
+    fitFunction(x, y, w, &logistic_f, &logistic_fd, "Logistic function", results);
     //printf("%d\n", int(rep.terminationtype));  // status code
 
     // print out the fitting procedure
@@ -189,11 +194,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     }*/
 
     // nonlinear square curve fitting for hyperbolic tangent function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, hyperbolic_f, hyperbolic_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "hyperbolic tangent function", rep.wrmserror});
+    fitFunction(x, y, w, &hyperbolic_f, &hyperbolic_fd, "hyperbolic tangent function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
@@ -202,11 +203,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     }*/
     
     // nonlinear square curve fitting for arctangent function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, arctangent_f, arctangent_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "arctangent function", rep.wrmserror});
+    fitFunction(x, y, w, &arctangent_f, &arctangent_fd, "arctangent function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
@@ -215,11 +212,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     }*/
     
     // nonlinear square curve fitting for Gudermannian function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, gudermannian_f, gudermannian_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "gudermannian function", rep.wrmserror});
+    fitFunction(x, y, w, &gudermannian_f, &gudermannian_fd, "gudermannian function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
@@ -228,11 +221,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     }*/
     
     // nonlinear square curve fitting for simple algebraic function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, algebraic_f, algebraic_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "simple algebraic function", rep.wrmserror});
+    fitFunction(x, y, w, &algebraic_f, &algebraic_fd, "simple algebraic function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
@@ -241,11 +230,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     }*/
 
     // Nonlinear squares curve fitting for error function based sigmoid
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    lsfitfit(state, erf_sigmoid_f, erf_sigmoid_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "error function based sigmoid", rep.wrmserror});
+    fitFunction(x, y, w, &erf_sigmoid_f, &erf_sigmoid_fd, "error function based sigmoid", results);
     
 
     m.lock();
