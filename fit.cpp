@@ -106,7 +106,47 @@ void algebraic_fd(const real_1d_array &c, const real_1d_array &x, double &func, 
     grad[1] = - (c[0] / (2 * (sqrt((c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)))));
 }
 
+// -------------------------------------------------------------------------
+// GOMPERTZ FUNCTION
+// f(x) = exp( -k * exp( -alpha*x ) )
+// We'll define f(x)=1 - Gompertz(...) to keep it consistent with the others.
+// -------------------------------------------------------------------------
+double gompertz(double k, double alpha, double x)
+{
+    return std::exp(-k * std::exp(-alpha * x));
+}
 
+void gompertz_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
+{
+    double k     = c[0];
+    double alpha = c[1];
+    double val   = gompertz(k, alpha, x[0]); 
+    func = 1.0 - val;
+}
+
+void gompertz_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
+{
+    double k     = c[0];
+    double alpha = c[1];
+    double xx    = x[0];
+    double val   = gompertz(k, alpha, xx);
+
+    // func = 1 - val
+    func = 1.0 - val;
+    
+    // d/dk of [1 - val] = - d/dk [val]
+    // val = exp(-k * exp(-alpha*x))
+    // d[val]/d[k] = val * [ - exp(-alpha*x) ]
+    // => d/dk(1 - val) = + exp(-alpha*x) * val
+    grad[0] = std::exp(-alpha * xx) * val;
+
+    // d/dalpha of [1 - val] = - d/dalpha [val]
+    // d[val]/d[alpha] = val * [ -k * d/d[alpha]( exp(-alpha*x) ) ] = val * [ -k * ( -x * exp(-alpha*x) ) ] = + k*x * exp(-alpha*x) * val
+    // => d/dalpha(1 - val) = - [ + k*x * exp(-alpha*x) * val ] = -k * x * exp(-alpha*x) * val
+    grad[1] = -k * xx * std::exp(-alpha * xx) * val;
+}
+
+// error function based sigmoid
 double erf_sigmoid(double k, double alpha, double x) {
     // Compute z = k * (x - alpha)
     double z = k * (x - alpha);
@@ -200,7 +240,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     // print out the fitting procedure
     /*for (int i = 0; i < y.length(); i++) {
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - hyperbolic_tangent(c[0], c[1], x[i][0]));
-    }*/
+    */
     
     // nonlinear square curve fitting for arctangent function
     fitFunction(x, y, w, &arctangent_f, &arctangent_fd, "arctangent function", results);
@@ -224,10 +264,14 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     fitFunction(x, y, w, &algebraic_f, &algebraic_fd, "simple algebraic function", results);
     //printf("%d\n", int(rep.terminationtype));
 
-    // print out the fitting procedure
-    /*for (int i = 0; i < y.size(); i++){
-        printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - algebraic(c[0], c[1], x[i][0]));
-    }*/
+    // ----------------------------------------------------------------------
+    // nonlinear square curve fitting for Gompertz function
+    // ----------------------------------------------------------------------
+    lsfitcreatewfg(x, y, w, c, state);
+    lsfitsetcond(state, epsx, maxits);
+    alglib::lsfitfit(state, gompertz_f, gompertz_fd);
+    lsfitresults(state, c, rep);
+    results.push_back({c, "Gompertz function", rep.wrmserror});
 
     // Nonlinear squares curve fitting for error function based sigmoid
     fitFunction(x, y, w, &erf_sigmoid_f, &erf_sigmoid_fd, "error function based sigmoid", results);
