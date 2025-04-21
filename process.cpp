@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <iterator>
 #include <thread>
+#include <dataanalysis.h>
+#include <linalg.h>
 
 #include "classMember.h"
 #include "modelState.h"
@@ -65,15 +67,11 @@ void normalizeFeatures(std::unordered_map<std::string, std::vector<ClassMember> 
         }
         radius = std::sqrt(radius);
 
-        if (radius < minRadius) {
+        if (radius > 0 && radius < minRadius) {
             minRadius = radius;
         }
     }
 
-    if (minRadius == 0) {
-        std::cerr << "ERROR: Minimum radius is 0\n";
-        std::exit(0);
-    }
     if (minRadius == std::numeric_limits<double>::max()) {
         std::cerr << "ERROR: Minimum radius is infinity\n";
         std::exit(0);
@@ -90,6 +88,66 @@ void normalizeFeatures(std::unordered_map<std::string, std::vector<ClassMember> 
 
     MODEL_STATE.featureMeans = std::move(featureMeans);
     MODEL_STATE.minRadius = minRadius;
+}
+
+void copyDatapoints(std::vector<ClassMember>& dataset, alglib::real_2d_array& datapoints, bool to_alglib_array) {
+    size_t npoints = dataset.size();
+    size_t nvars = dataset[0].features.size();
+    size_t projectionDim = datapoints.cols();
+
+    if (to_alglib_array) {
+        for (size_t i = 0; i < npoints; ++i) {
+            for (size_t j = 0; j < nvars; ++j) {
+                datapoints[i][j] = dataset[i].features[j];
+            }
+        }
+    }
+    else {
+        for (size_t i = 0; i < npoints; ++i) {
+            for (size_t j = 0; j < projectionDim; ++j) {
+                dataset[i].features[j] = datapoints[i][j];
+            }
+            dataset[i].features.resize(projectionDim);
+        }
+    }
+}
+
+/* Project a matrix of datapoints, where each row corresponds to a different datapoint, onto the principal axes,
+where each column is a vector of the basis, and store the results in principalComponents. */
+void projectOntoPrincipalAxes(const alglib::real_2d_array& datapoints, const alglib::real_2d_array& principalAxes,
+    alglib::real_2d_array& principalComponents) {
+    alglib::rmatrixgemm(datapoints.rows(), principalAxes.cols(), datapoints.cols(), 1, datapoints, 0, 0, 0, principalAxes, 0, 0, 0, 0, principalComponents, 0, 0);
+}
+
+// Project a higher dimension dataset into a lower dimension subspace
+void reduceDimensionality(std::vector<ClassMember>& dataset) {
+    alglib::real_2d_array datapoints;
+    alglib::real_1d_array variance;
+    alglib::real_2d_array principalAxes;
+    alglib::real_2d_array principalComponents;
+    size_t npoints = dataset.size();
+    size_t nvars = dataset[0].features.size();
+    alglib::ae_int_t nneeded = 3, eps = 0, maxits = 0;
+
+    datapoints.setlength(npoints, nvars);
+    variance.setlength(nneeded);
+    principalAxes.setlength(nvars, nneeded);
+    principalComponents.setlength(npoints, nneeded);
+
+    // Copy data into ALGLIB array
+    copyDatapoints(dataset, datapoints, true);
+
+    // Find the principal axes
+    alglib::pcatruncatedsubspace(datapoints, nneeded, eps, maxits, variance, principalAxes);
+
+    // Project dataset into lower dimension
+    projectOntoPrincipalAxes(datapoints, principalAxes, principalComponents);
+
+    // Copy from ALGLIB array into vector of ClassMember objects
+    copyDatapoints(dataset, principalComponents, false);
+
+    // Save principal axes for reducing dimensionality of test set
+    MODEL_STATE.principalAxes = std::move(principalAxes);
 }
 
 double euclideanDistance(const std::vector<double>& a, const std::vector<double>& b) {
@@ -121,15 +179,32 @@ void computeNearestNeighborDistances(const std::unordered_map<std::string, std::
     }
 }
 
-std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassMember> dataset) {
-    // Group dataset by class
+std::unordered_map<std::string, std::vector<ClassMember> > groupByClass(std::vector<ClassMember>& dataset) {
     std::unordered_map<std::string, std::vector<ClassMember> > classMap;
-    for (const auto& obj : dataset) {
+    for (auto& obj : dataset) {
         classMap[obj.name].push_back(obj);
     }
+    return classMap;
+}
+
+std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassMember> dataset, bool applyPCA) {
+    std::unordered_map<std::string, std::vector<ClassMember> > classMap = groupByClass(dataset);
 
     // normalize features
     normalizeFeatures(classMap);
+    
+    if (applyPCA && dataset[0].features.size() >= 3) {
+        size_t i = 0;
+        for (const auto& pair : classMap) {
+            for (const ClassMember& datapoint : pair.second) {
+                dataset[i++] = datapoint;
+            }
+        }
+
+        reduceDimensionality(dataset);
+
+        classMap = groupByClass(dataset);
+    }
 
     // compute k nearest distance, k = 1
     std::unordered_map<std::string, std::vector<double> > classNNDistMap;
