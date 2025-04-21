@@ -12,6 +12,7 @@
 
 struct ModelState {
 	std::vector<double> featureMeans;
+	alglib::real_2d_array principalAxes;
 	double minRadius;
 	std::unordered_map<std::string, std::vector<ClassMember> > classMap;
 	std::unordered_map<std::string, FitResult> bestFit;

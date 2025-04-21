@@ -85,7 +85,8 @@ bool isNonnegativeDouble(char* value) {
 }
 
 int main(int argc, char* argv[]) {
-    // Command line arguments can optionally include the p value threshold and write p values to a CSV    
+    // Command line arguments can optionally include the p value threshold and write p values to a CSV
+    /*
     double pvalueThreshold = -1;
     bool pValuesToCSV = false;
     std::string datasetFilename, pValuesCSVFilename;
@@ -120,7 +121,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: No dataset provided.\n";
         return 0;
     }
-    
+    */
+
+    bool bestFitFunctionsToCSV = std::atoi(argv[1]);
+    std::string bestFitFunctionsCSVFilename = argv[2];
+    bool pValuesToCSV = std::atoi(argv[3]);
+    std::string pValuesCSVFilename = argv[4];
+    bool summaryToCSV = std::atoi(argv[5]);
+    std::string summaryCSVFilename = argv[6];
+    bool applyPCA = std::atoi(argv[7]);
+    double pvalueThreshold = (std::atof(argv[8]) > 0) ? std::atof(argv[8]) : -1;
+    std::string datasetFilename = argv[9];
+
     std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
     
     std::vector<ClassMember> kSets[K_FOLDS];
@@ -144,10 +156,12 @@ int main(int argc, char* argv[]) {
         
         std::cout << "Iteration " << i << ":\n";
 
-        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset);
+        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset, applyPCA);
 
         fitClasses(sorted_distances);
 
-        test(kSets[i], predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i, pvalueThreshold, pValuesToCSV, pValuesCSVFilename);
+        test(kSets[i], predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i, applyPCA,
+            pvalueThreshold, bestFitFunctionsToCSV, bestFitFunctionsCSVFilename, pValuesToCSV, pValuesCSVFilename,
+            summaryToCSV, summaryCSVFilename);
     }
 }

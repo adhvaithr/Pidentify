@@ -5,6 +5,7 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <sstream>
 #include <unordered_map>
 #include <limits>
 #include <algorithm>
@@ -12,6 +13,7 @@
 #include <thread>
 #include <cassert>
 #include <set>
+#include "ap.h"
 
 #include "classMember.h"
 #include "process.h"
@@ -112,6 +114,16 @@ std::vector<ClassMember> normalize(std::vector<ClassMember> dataset) {
 	return dataset;
 }
 
+// Project test dataset into lower dimension subspace
+void toPCASubspace(std::vector<ClassMember>& dataset) {
+	alglib::real_2d_array datapoints, principalComponents;
+	datapoints.setlength(dataset.size(), dataset[0].features.size());
+	principalComponents.setlength(dataset.size(), MODEL_STATE.principalAxes.cols());
+	copyDatapoints(dataset, datapoints, true);
+	projectOntoPrincipalAxes(datapoints, MODEL_STATE.principalAxes, principalComponents);
+	copyDatapoints(dataset, principalComponents, false);
+}
+
 // Calculate the minimum distance between the datapoints in the test set with each class
 void computeClassDistances(const std::vector<ClassMember>& dataset, std::vector<std::unordered_map<std::string, double> >& nnDistances,
 	size_t start, size_t stop) {
@@ -188,6 +200,26 @@ void printPValues(const std::vector<ClassMember>& dataset, const std::vector<std
 	}
 }
 
+void writeBestFitFunctionsToCSV(const std::string& filename, size_t fold) {
+	std::vector<std::string> header;
+	std::vector<std::vector<std::string> > rows;
+
+	if (fold == 0) {
+		std::string columnNames[] = { "fold", "class", "bestFitFunction", "c", "a", "residual" };
+		for (std::string columnName : columnNames) {
+			header.push_back(columnName);
+		}
+	}
+		
+	for (const auto& pair : MODEL_STATE.bestFit) {
+		std::vector<std::string> row = { std::to_string(fold), pair.first, pair.second.functionName, std::to_string(pair.second.c[0]),
+			std::to_string(pair.second.c[1]), std::to_string(pair.second.wrmsError) };
+		rows.push_back(std::move(row));
+	}
+
+	writeToCSV(header, rows, filename);
+}
+
 // Write the p values for each datapoint in the test set to a CSV file
 void writePValuesToCSV(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
 	const std::string& filename, size_t fold) {
@@ -211,6 +243,87 @@ void writePValuesToCSV(const std::vector<ClassMember>& dataset, const std::vecto
 		for (const std::string& className : classNames) {
 			rows[i].push_back(pvalues[i].at(className));
 		}
+	}
+
+	writeToCSV(header, rows, filename);
+}
+
+void createOverallStatRow(const std::unordered_map<std::string, double[5]>& predictionStatistics,
+	const std::string& threshold, std::vector<std::vector<std::string> >& rows, size_t currentRow) {
+	std::stringstream ss;
+	std::string entry;
+	int defaultPrecision = ss.precision();
+	ss << predictionStatistics.at(threshold)[0] << ' ' << predictionStatistics.at(threshold)[1] << ' ';
+	ss << std::fixed << std::setprecision(2);
+	ss << predictionStatistics.at(threshold)[2] << ' ' << predictionStatistics.at(threshold)[3] << ' ' << predictionStatistics.at(threshold)[4] << ' ';
+	ss << std::setprecision(defaultPrecision);
+	for (int j = 0; j < 2; ++j) {
+		rows[currentRow].emplace_back("n/a");
+	}
+	while (ss >> entry) {
+		rows[currentRow].emplace_back(entry);
+	}
+}
+
+void createClassStatRow(const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
+	const std::string& className, double classInstances, const std::string& thresholdName,
+	double thresholdValue, std::vector<std::vector<std::string> >& rows, size_t currentRow) {
+	std::stringstream ss;
+	std::string entry;
+	int defaultPrecision = ss.precision();
+	rows[currentRow].push_back(className);
+	rows[currentRow].push_back(std::to_string(classInstances));
+	rows[currentRow].push_back(std::to_string(thresholdValue));
+	rows[currentRow].push_back("n/a");
+	ss << std::fixed << std::setprecision(2);
+	for (double statistic : predictionStatisticsPerClass.at(thresholdName + "|" + className)) {
+		ss << statistic << ' ';
+	}
+	ss << std::setprecision(defaultPrecision);
+	while (ss >> entry) {
+		rows[currentRow].emplace_back(entry);
+	}
+}
+
+void createStatisticRowsForThreshold(const std::unordered_map<std::string, double[5]>& predictionStatistics,
+	const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
+	const std::unordered_map<std::string, double>& numInstancesPerClass,
+	const std::vector<std::string>& classNames, const std::string& threshold, std::vector<std::vector<std::string> >& rows,
+	size_t& currentRow) {
+	createOverallStatRow(predictionStatistics, threshold, rows, currentRow);
+	++currentRow;
+	for (const std::string& className : classNames) {
+		createClassStatRow(predictionStatisticsPerClass, className, numInstancesPerClass.at(className),
+			threshold, predictionStatistics.at(threshold)[0], rows, currentRow);
+		++currentRow;
+	}
+}
+
+// Writing the summary to a CSV is currently only implemented for the case with default p values
+void writeSummaryToCSV(const std::unordered_map<std::string, double[5]>& predictionStatistics,
+	const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
+	const std::unordered_map<std::string, double>& numInstancesPerClass,
+	std::vector<std::string> classNames, const std::string& filename) {
+	std::sort(classNames.begin(), classNames.end());
+	std::vector<std::string> header = { "class", "totalInstances", "pValueThreshold", "averageClassesOverThreshold",
+		"correct(%)", "incorrect(%)", "noneOfTheAbove(%)" };
+	std::vector<std::vector<std::string> > rows((TOTAL_DYNAMIC_PVALUES + CONSTANT_PVALUE_THRESHOLDS.size()) * (classNames.size() + 1));
+
+	// Rows for dynamic p values
+	std::string threshold;
+	size_t currentRow = 0;
+	for (int i = TOTAL_DYNAMIC_PVALUES - 1; i >= 0; --i) {
+		threshold = std::string("1/") + std::to_string(std::max(PVALUE_INCREMENT * i, 1.0)) + "n";
+		createStatisticRowsForThreshold(predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass,
+			classNames, threshold, rows, currentRow);
+	}
+
+	// Rows for constant p values
+	std::vector<double> constantThresholds = CONSTANT_PVALUE_THRESHOLDS;
+	std::sort(constantThresholds.begin(), constantThresholds.end());
+	for (double constantThreshold : constantThresholds) {
+		createStatisticRowsForThreshold(predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass,
+			classNames, std::to_string(constantThreshold), rows, currentRow);
 	}
 
 	writeToCSV(header, rows, filename);
@@ -322,8 +435,8 @@ void calculateSummary(std::unordered_map<std::string, double[5]>& predictionStat
 
 void printPredCategories(const double results[]) {
 	int defaultPrecision = std::cout.precision();
-    std::cout << "==========================" << std::endl;
 	std::cout << "Average number of classes over the p value threshold per datapoint: " << results[1] << std::endl;
+    std::cout << "==========================" << std::endl;
 	std::cout << std::setprecision(2) << std::fixed;
 	std::cout << "Correct: " << results[2] << "%\n";
 	std::cout << "Incorrect: " << results[3] << "%\n";
@@ -344,6 +457,16 @@ void printPredCategoriesPerClass(const double results[]) {
     std::cout.unsetf(std::ios::fixed);
     std::cout << "--------------------------" << std::endl;
  }
+
+void printPredCategoriesAllClasses(const std::string& threshold,
+	const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
+	const std::vector<std::string>& classNames) {
+	for (auto& currClass : classNames) {
+		std::string classKey = threshold + "|" + currClass;
+		std::cout << "Class: " << currClass << std::endl;
+		printPredCategoriesPerClass(predictionStatisticsPerClass.at(classKey));
+	}
+}
  
 void printSummaryPerClass(const std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass) {
 
@@ -375,10 +498,7 @@ void printSummary(const std::unordered_map<std::string, double[5]>& predictionSt
 		threshold = std::string("1/") + std::to_string(std::max(PVALUE_INCREMENT * i, 1.0)) + "n";
 		std::cout << "\nDynamic p value threshold: " << threshold << " = " << predictionStatistics.at(threshold)[0] << std::endl;
 		printPredCategories(predictionStatistics.at(threshold));
-        for (auto& currClass: classNames) {
-            std::string classKey = threshold + "|" + currClass;
-            printPredCategoriesPerClass(predictionStatisticsPerClass.at(classKey));
-        }
+		printPredCategoriesAllClasses(threshold, predictionStatisticsPerClass, classNames);
 	}
 
     
@@ -387,6 +507,7 @@ void printSummary(const std::unordered_map<std::string, double[5]>& predictionSt
 	for (double constThreshold : constantThresholds) {
 		std::cout << "Constant p value threshold: " << constThreshold << std::endl;
 		printPredCategories(predictionStatistics.at(std::to_string(constThreshold)));
+		printPredCategoriesAllClasses(std::to_string(constThreshold), predictionStatisticsPerClass, classNames);
 	}
 }
 
@@ -400,7 +521,9 @@ void printClassCounts(const std::unordered_map<std::string, double>& classCounts
 
 void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics, std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
     std::unordered_map<std::string, double>& numInstancesPerClass,
-	size_t fold, double pvalueThreshold, bool pValuesToCSV, const std::string& pValuesCSVFilename) {
+	size_t fold, bool applyPCA, double pvalueThreshold, bool bestFitFunctionsToCSV,
+	const std::string& bestFitFunctionsCSVFilename, bool pValuesToCSV, const std::string& pValuesCSVFilename,
+	bool summaryToCSV, const std::string& summaryCSVFilename) {
 	// Create p value thresholds if none are provided by the user
 	std::vector<double> pvalueThresholds;
 	bool userPValueThreshold;
@@ -413,8 +536,13 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 		predictionStatistics[std::to_string(pvalueThreshold)][0] += pvalueThreshold;
 		userPValueThreshold = true;
 	}
-	
+
 	std::vector<ClassMember> normalizedDataset = normalize(dataset);
+
+	
+	if (applyPCA && dataset[0].features.size() >= 3) {
+		toPCASubspace(normalizedDataset);
+	}
 
 	// Find the nearest neighbor distance to each class
 	std::vector<std::unordered_map<std::string, double> > nnDistances(normalizedDataset.size());
@@ -464,10 +592,15 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 		t.join();
 	}
 	
+	if (bestFitFunctionsToCSV) {
+		writeBestFitFunctionsToCSV(bestFitFunctionsCSVFilename, fold);
+	}
+
 	printPValues(dataset, pvalues);
 	if (pValuesToCSV) {
 		writePValuesToCSV(dataset, pvalues, pValuesCSVFilename, fold);
 	}
+
 	// Calculate the percentage of datapoints predicted correctly, incorrectly, or as none of the above
 	calculateStatistics(dataset, pvalues, pvalueThresholds, 
         predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, userPValueThreshold);
@@ -487,6 +620,10 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 		}
 		else {
             printSummary(predictionStatistics, predictionStatisticsPerClass, classNames);
+			if (summaryToCSV) {
+				writeSummaryToCSV(predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, classNames,
+					summaryCSVFilename);
+			}
 		}
 	}
 }
