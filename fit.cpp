@@ -267,11 +267,7 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     // ----------------------------------------------------------------------
     // nonlinear square curve fitting for Gompertz function
     // ----------------------------------------------------------------------
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, gompertz_f, gompertz_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "Gompertz function", rep.wrmserror});
+    fitFunction(x, y, w, &gompertz_f, &gompertz_fd, "Gompertz function", results);
 
     // Nonlinear squares curve fitting for error function based sigmoid
     fitFunction(x, y, w, &erf_sigmoid_f, &erf_sigmoid_fd, "error function based sigmoid", results);

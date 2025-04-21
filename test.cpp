@@ -166,6 +166,9 @@ void calculatePValues(const std::vector<std::unordered_map<std::string, double> 
 			else if (bestFitFunction == "gudermannian function") {
 				pvalue = 1 - gudermannian(c, a, pair.second);
 			}
+			else if (bestFitFunction == "Gompertz function") {
+				pvalue = 1 - gompertz(c, a, pair.second);
+			}
 			else if (bestFitFunction == "error function based sigmoid") {
 				pvalue = 1 - erf_sigmoid(c, a, pair.second);
 			}
