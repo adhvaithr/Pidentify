@@ -8,6 +8,10 @@
 #include <fstream>
 #include <thread>
 #include <mutex>
+#include <random>
+#include <chrono>
+#include <map>
+
 #include <algorithm>
 #include <iterator>
 
@@ -23,6 +27,30 @@ ModelState MODEL_STATE;
 std::mutex m;
 double NUM_THREADS;
 int K_FOLDS = 10;
+
+/*Limit number of instances in each class */
+std::vector<ClassMember> trimmedDataset(const std::vector<ClassMember>& dataset, size_t maxPerClass = 1000) {
+    std::unordered_map<std::string, std::vector<ClassMember>> classCountMap;
+    for (const auto& member : dataset) {
+        classCountMap[member.name].push_back(member);
+    }
+
+    std::vector<ClassMember> trimmed;
+    std::random_device rand_d;
+
+    std::mt19937 gen(rand_d());
+
+    for (auto& currClass : classCountMap) {
+        auto& members = currClass.second;
+        if (members.size() > maxPerClass) {
+            std::shuffle(members.begin(), members.end(), gen);
+            trimmed.insert(trimmed.end(), members.begin(), members.begin() + maxPerClass);
+        } else {
+            trimmed.insert(trimmed.end(), members.begin(), members.end());
+        }
+    }
+    return trimmed;
+}
 
 /*Read dataset from custom formatted file where columns are in the following order:
 class name, numerical features, nonnumerical features (if any).*/
@@ -134,7 +162,7 @@ int main(int argc, char* argv[]) {
     std::string datasetFilename = argv[9];
 
     std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
-    
+    dataset = trimmedDataset(dataset, 1000);
     std::vector<ClassMember> kSets[K_FOLDS];
     kFoldSplit(dataset, kSets);
     
