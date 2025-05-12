@@ -10,8 +10,7 @@
 #include <mutex>
 #include <random>
 #include <chrono>
-#include <map>
-
+#include <cmath>
 #include <algorithm>
 #include <iterator>
 
@@ -52,10 +51,45 @@ std::vector<ClassMember> trimmedDataset(const std::vector<ClassMember>& dataset,
     return trimmed;
 }
 
-/*Read dataset from custom formatted file where columns are in the following order:
-class name, numerical features, nonnumerical features (if any).*/
-std::vector<ClassMember> readFormattedDataset(const std::string& filename) {
-    std::vector<ClassMember> dataset;
+void distributeAcrossFolds(const std::unordered_map<std::string, std::vector<ClassMember> >::const_iterator& datasetIter, std::unordered_map<std::string, std::vector<ClassMember> > kSets[]) {
+    auto& datapoints = datasetIter->second;
+    size_t minDatapointsPerFold = datapoints.size() / K_FOLDS;
+
+    size_t extraDatapoints = datapoints.size() - minDatapointsPerFold * K_FOLDS;
+    std::vector<ClassMember>::const_iterator datapointsIter = datapoints.begin();
+
+    for (int i = 0; i < K_FOLDS; ++i) {
+        size_t datapointsToInsert = (i < extraDatapoints) ? minDatapointsPerFold + 1 : minDatapointsPerFold;
+        std::vector<ClassMember>& foldClassData = kSets[i][datasetIter->first];
+        foldClassData.reserve(datapointsToInsert);
+        foldClassData.insert(foldClassData.end(), datapointsIter, datapointsIter + datapointsToInsert);
+        datapointsIter += datapointsToInsert;
+    }
+}
+
+void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& dataset,
+    std::unordered_map<std::string, std::vector<ClassMember> > kSets[], size_t maxPerClass = 1000) {
+    std::random_device rand_d;
+
+    std::mt19937 gen(rand_d());
+
+    for (auto iter = dataset.begin(); iter != dataset.end();) {
+        auto& members = iter->second;
+        if (members.size() < K_FOLDS) {
+            dataset.erase(iter);
+            continue;
+        }
+        std::shuffle(members.begin(), members.end(), gen);
+        if (members.size() > maxPerClass) {
+            members.resize(maxPerClass);
+        }
+        distributeAcrossFolds(iter, kSets);
+        ++iter;
+    }
+}
+
+std::unordered_map<std::string, std::vector<ClassMember> > readFormattedDataset(const std::string& filename) {
+    std::unordered_map<std::string, std::vector<ClassMember> > dataset;
     std::ifstream file(filename);
     std::string line;
 
@@ -85,9 +119,14 @@ std::vector<ClassMember> readFormattedDataset(const std::string& filename) {
             obj.features.push_back(std::stod(feature));
         }
         obj.lineNumber = lineNumber++;
-        dataset.push_back(obj);
+        dataset[obj.name].push_back(obj);
     }
     file.close();
+
+    for (const auto& pair : dataset) {
+        MODEL_STATE.classNames.push_back(pair.first);
+    }
+    std::sort(MODEL_STATE.classNames.begin(), MODEL_STATE.classNames.end());
 
     return dataset;
 }
@@ -161,10 +200,10 @@ int main(int argc, char* argv[]) {
     double pvalueThreshold = (std::atof(argv[8]) > 0) ? std::atof(argv[8]) : -1;
     std::string datasetFilename = argv[9];
 
-    std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
-    dataset = trimmedDataset(dataset, 1000);
-    std::vector<ClassMember> kSets[K_FOLDS];
-    kFoldSplit(dataset, kSets);
+    std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);
+
+    std::unordered_map<std::string, std::vector<ClassMember> > kSets[K_FOLDS];
+    kFoldSplit(dataset, kSets, 1000);
     
     setThreads();
 
@@ -173,12 +212,15 @@ int main(int argc, char* argv[]) {
     std::unordered_map<std::string, double> numInstancesPerClass;
 
     for (int i = 0; i < K_FOLDS; ++i) {
-        std::vector<ClassMember> trainDataset;
+        std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
         
         for (int j = 0; j < K_FOLDS; ++j) {
             if (j != i) {
-                trainDataset.reserve(trainDataset.size() + kSets[j].size());
-                trainDataset.insert(trainDataset.end(), kSets[j].begin(), kSets[j].end());
+                for (const auto& pair : kSets[j]) {
+                    std::vector<ClassMember>& classData = trainDataset[pair.first];
+                    classData.reserve(classData.size() + pair.second.size());
+                    classData.insert(classData.end(), pair.second.begin(), pair.second.end());
+                }
             }
         }
         
@@ -188,7 +230,14 @@ int main(int argc, char* argv[]) {
 
         fitClasses(sorted_distances);
 
-        test(kSets[i], predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i, applyPCA,
+        std::vector<ClassMember> testDataset;
+        for (const auto& pair : kSets[i]) {
+            for (const auto& obj : pair.second) {
+                testDataset.push_back(obj);
+            }
+        }
+
+        test(testDataset, predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i, applyPCA,
             pvalueThreshold, bestFitFunctionsToCSV, bestFitFunctionsCSVFilename, pValuesToCSV, pValuesCSVFilename,
             summaryToCSV, summaryCSVFilename);
     }

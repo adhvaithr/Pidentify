@@ -11,11 +11,15 @@
 #include "fit.h"
 
 struct ModelState {
-	std::vector<double> featureMeans;
+	std::vector<double> means;
+	std::vector<double> sigmas;
+	std::vector<size_t> zeroStdDeviation;
 	alglib::real_2d_array principalAxes;
-	double minRadius;
 	std::unordered_map<std::string, std::vector<ClassMember> > classMap;
 	std::unordered_map<std::string, FitResult> bestFit;
+	size_t trainDatasetSize;
+	std::vector<std::string> classNames;
+	std::unordered_map<std::string, std::vector<double> > featureWeights;
 };
 
 extern ModelState MODEL_STATE;

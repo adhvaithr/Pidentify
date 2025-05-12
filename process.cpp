@@ -14,100 +14,126 @@
 #include "classMember.h"
 #include "modelState.h"
 
-void normalizeFeatures(std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
+// Delete elements from a vector assuming indices is sorted in ascending order
+void deleteVectorElements(const std::vector<size_t>& indices, std::vector<double>& vec) {
+    for (int i = indices.size() - 1; i >= 0; --i) {
+        vec.erase(vec.begin() + indices[i]);
+    }
+}
+
+// Delete certain features from the dataset assuming indices is sorted in ascending order
+void removeFeatures(const std::vector<size_t>& indices, std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
+    for (auto& pair : dataset) {
+        for (auto& obj : pair.second) {
+            deleteVectorElements(indices, obj.features);
+        }
+    }
+}
+
+// Delete certain features from the dataset assuming indices is sorted in ascending order
+void removeFeatures(const std::vector<size_t>& indices, std::vector<ClassMember>& dataset) {
+    for (auto& obj : dataset) {
+        deleteVectorElements(indices, obj.features);
+    }
+}
+
+void standardizeFeatures(std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
     if (dataset.empty()) {
         std::cerr << "Dataset is empty!" << std::endl;
         return;
     }
 
     size_t numFeatures = dataset.begin()->second[0].features.size(), totalDatapoints = 0;
-    std::vector<double> featureMeans(numFeatures, 0.0);
-    std::unordered_map<std::string, std::vector<double> > classCentroids;
+    std::vector<double> means(numFeatures, 0.0);
+    std::vector<double> sigmas(numFeatures, 0.0);
 
-    // Calculate mean for each feature and mean vector for each class
+    // Calculate the mean for each feature
     for (const auto& pair : dataset) {
-        classCentroids[pair.first].resize(numFeatures, 0.0);
+        totalDatapoints += pair.second.size();
         for (const auto& obj : pair.second) {
             if (obj.features.size() != numFeatures) {
                 fprintf(stderr, "Inconsistent feature size: %zu != %zu\n", obj.features.size(), numFeatures);
                 std::exit(0);
             }
             for (size_t i = 0; i < numFeatures; ++i) {
-                featureMeans[i] += obj.features[i];
-                classCentroids[pair.first][i] += obj.features[i];
+                means[i] += obj.features[i];
             }
-        }
-        totalDatapoints += pair.second.size();
-        for (size_t i = 0; i < numFeatures; ++i) {
-            classCentroids[pair.first][i] /= pair.second.size();
         }
     }
 
-    for (double& mean : featureMeans) {
+    for (double& mean : means) {
         mean /= totalDatapoints;
     }
 
-    // Calculate the minimum radius (smallest standard deviation of distance from the center of the class) across all classes
-    double minRadius = std::numeric_limits<double>::max();
+    MODEL_STATE.trainDatasetSize = totalDatapoints;
+
+    // Calculate the standard deviation for each feature
     for (const auto& pair : dataset) {
-        std::vector<double> sigmas(numFeatures, 0.0);
-        double radius = 0;
         for (const auto& obj : pair.second) {
             for (size_t i = 0; i < numFeatures; ++i) {
-                sigmas[i] += (obj.features[i] - classCentroids[pair.first][i]) *
-                    (obj.features[i] - classCentroids[pair.first][i]);
+                sigmas[i] += (obj.features[i] - means[i]) * (obj.features[i] - means[i]);
             }
-        }
-        for (double& sigma : sigmas) {
-            if (sigma == 0) {
-                std::cout << "Warning: For class \"" << pair.first << "\" the standard deviation of distance from the " <<
-                    "centroid is 0 for feature index " << (&sigma - &sigmas[0]) << std::endl;
-            }
-            radius += sigma / pair.second.size();
-        }
-        radius = std::sqrt(radius);
-
-        if (radius > 0 && radius < minRadius) {
-            minRadius = radius;
         }
     }
 
-    if (minRadius == std::numeric_limits<double>::max()) {
-        std::cerr << "ERROR: Minimum radius is infinity\n";
-        std::exit(0);
+    std::vector<size_t> zeroStdDeviation;
+    for (double& sigma : sigmas) {
+        sigma = std::sqrt(sigma / totalDatapoints);
+        if (sigma == 0) {
+            size_t idx = &sigma - &sigmas[0];
+            std::cout << "Standard deviation is zero for feature index " << idx << std::endl;
+            std::cout << "Removing feature with index " << idx << " for all instances.\n";
+            zeroStdDeviation.push_back(idx);
+        }
     }
 
-    // Standardize datapoints
+    // Remove any features that have a standard deviation of 0
+    if (!zeroStdDeviation.empty()) {
+        removeFeatures(zeroStdDeviation, dataset);
+        deleteVectorElements(zeroStdDeviation, means);
+        deleteVectorElements(zeroStdDeviation, sigmas);
+        MODEL_STATE.zeroStdDeviation = std::move(zeroStdDeviation);
+    }
+
+    // Z-score standardization of each feature
     for (auto& pair : dataset) {
-        for (ClassMember& obj : pair.second) {
-            for (size_t i = 0; i < numFeatures; ++i) {
-               obj.features[i] = (obj.features[i] - featureMeans[i]) / minRadius;
+        for (auto& obj : pair.second) {
+            for (size_t i = 0; i < obj.features.size(); ++i) {
+                obj.features[i] = (obj.features[i] - means[i]) / sigmas[i];
             }
         }
     }
 
-    MODEL_STATE.featureMeans = std::move(featureMeans);
-    MODEL_STATE.minRadius = minRadius;
+    // Save means and standard deviations to standardize test points
+    MODEL_STATE.means = std::move(means);
+    MODEL_STATE.sigmas = std::move(sigmas);
 }
 
-void copyDatapoints(std::vector<ClassMember>& dataset, alglib::real_2d_array& datapoints, bool to_alglib_array) {
-    size_t npoints = dataset.size();
-    size_t nvars = dataset[0].features.size();
-    size_t projectionDim = datapoints.cols();
-
+void copyDatapoints(std::unordered_map<std::string, std::vector<ClassMember> >& dataset, alglib::real_2d_array& datapoints,
+    bool to_alglib_array) {
     if (to_alglib_array) {
-        for (size_t i = 0; i < npoints; ++i) {
-            for (size_t j = 0; j < nvars; ++j) {
-                datapoints[i][j] = dataset[i].features[j];
+        size_t i = 0;
+        size_t nvars = dataset.begin()->second[0].features.size();
+        for (const std::string& className : MODEL_STATE.classNames) {
+            for (const auto& obj : dataset.at(className)) {
+                for (size_t j = 0; j < nvars; ++j) {
+                    datapoints[i][j] = obj.features[j];
+                }
+                ++i;
             }
         }
     }
     else {
-        for (size_t i = 0; i < npoints; ++i) {
-            for (size_t j = 0; j < projectionDim; ++j) {
-                dataset[i].features[j] = datapoints[i][j];
+        size_t projectionDim = datapoints.cols();
+        size_t i = 0;
+        for (const std::string& className : MODEL_STATE.classNames) {
+            for (size_t k = 0; k < dataset.at(className).size(); ++k) {
+                for (size_t j = 0; j < projectionDim; ++j) {
+                    dataset.at(className)[k].features[j] = datapoints[i][j];
+                }
+                dataset.at(className)[k].features.resize(projectionDim);
+                ++i;
             }
-            dataset[i].features.resize(projectionDim);
         }
     }
 }
@@ -119,14 +145,13 @@ void projectOntoPrincipalAxes(const alglib::real_2d_array& datapoints, const alg
     alglib::rmatrixgemm(datapoints.rows(), principalAxes.cols(), datapoints.cols(), 1, datapoints, 0, 0, 0, principalAxes, 0, 0, 0, 0, principalComponents, 0, 0);
 }
 
-// Project a higher dimension dataset into a lower dimension subspace
-void reduceDimensionality(std::vector<ClassMember>& dataset) {
+void reduceDimensionality(std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
     alglib::real_2d_array datapoints;
     alglib::real_1d_array variance;
     alglib::real_2d_array principalAxes;
     alglib::real_2d_array principalComponents;
-    size_t npoints = dataset.size();
-    size_t nvars = dataset[0].features.size();
+    size_t npoints = MODEL_STATE.trainDatasetSize;
+    size_t nvars = dataset.begin()->second[0].features.size();
     alglib::ae_int_t nneeded = 3, eps = 0, maxits = 0;
 
     datapoints.setlength(npoints, nvars);
@@ -158,20 +183,30 @@ double euclideanDistance(const std::vector<double>& a, const std::vector<double>
     return std::sqrt(sum);
 }
 
+double weightedEuclideanDistance(const std::vector<double>& a, const std::vector<double>& b, const std::vector<double>& weights) {
+    double sum = 0.0;
+    for (size_t i = 0; i < a.size(); ++i) {
+        sum += weights[i] * (a[i] - b[i]) * (a[i] - b[i]);
+    }
+    return std::sqrt(sum);
+}
+
 void computeNearestNeighborDistances(const std::unordered_map<std::string, std::vector<ClassMember> >& classMap,
-    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className) {
+    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className, bool weighted) {
     for (const auto& obj : classMap.at(className)) {
         double minDistance = std::numeric_limits<double>::max();
         for (const auto& neighbor : classMap.at(className)) {
             if (&obj != &neighbor) {
-                double distance = euclideanDistance(obj.features, neighbor.features);
+                double distance = (weighted) ?
+                    weightedEuclideanDistance(obj.features, neighbor.features, MODEL_STATE.featureWeights.at(className)) :
+                    euclideanDistance(obj.features, neighbor.features);
                 if (distance < minDistance) {
                     minDistance = distance;
                 }
             }
         }
 
-        // Record neirest neighbor distance
+        // Record nearest neighbor distance
         m.lock();
         classNNDistMap[className].push_back(minDistance);
         m.unlock();
@@ -179,39 +214,89 @@ void computeNearestNeighborDistances(const std::unordered_map<std::string, std::
     }
 }
 
-std::unordered_map<std::string, std::vector<ClassMember> > groupByClass(std::vector<ClassMember>& dataset) {
-    std::unordered_map<std::string, std::vector<ClassMember> > classMap;
-    for (auto& obj : dataset) {
-        classMap[obj.name].push_back(obj);
-    }
-    return classMap;
-}
+void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
+    size_t numFeatures = dataset.begin()->second[0].features.size();
 
-std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassMember> dataset, bool applyPCA) {
-    std::unordered_map<std::string, std::vector<ClassMember> > classMap = groupByClass(dataset);
+    for (const auto& pair : dataset) {
+        std::vector<double> MWCFD(numFeatures, 0.0); // Mean Within Class Feature Distances
+        std::vector<double> MOCFD(numFeatures, 0.0); // Mean Outside Class Feature Distances
+        const std::vector<double> *nearestWithinClass = nullptr, *nearestOutsideClass = nullptr;
 
-    // normalize features
-    normalizeFeatures(classMap);
-    
-    if (applyPCA && dataset[0].features.size() >= 3) {
-        size_t i = 0;
-        for (const auto& pair : classMap) {
-            for (const ClassMember& datapoint : pair.second) {
-                dataset[i++] = datapoint;
+        for (const auto& obj : pair.second) {
+            // Find the closest datapoint within the same class
+            double minDistance = std::numeric_limits<double>::max();
+            for (const auto& neighbor : dataset.at(pair.first)) {
+                if (&obj != &neighbor) {
+                    double distance = euclideanDistance(obj.features, neighbor.features);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestWithinClass = &neighbor.features;
+                    }
+                }
             }
+
+            // Find the closest datapoint outside the class
+            minDistance = std::numeric_limits<double>::max();
+            for (const std::string className : MODEL_STATE.classNames) {
+                if (className != pair.first) {
+                    for (const auto& outsideNeighbor : dataset.at(className)) {
+                        double distance = euclideanDistance(obj.features, outsideNeighbor.features);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            nearestOutsideClass = &outsideNeighbor.features;
+                        }
+                    }
+                }
+            }
+
+            std::vector<double> featureDistances(numFeatures);
+            std::transform(obj.features.begin(), obj.features.end(), nearestWithinClass->begin(), featureDistances.begin(),
+                [](double feature1, double feature2)
+                {return (feature1 - feature2 < 0) ? feature2 - feature1 : feature1 - feature2; });
+
+            std::transform(MWCFD.begin(), MWCFD.end(), featureDistances.begin(), MWCFD.begin(),
+                [](double cumDistance, double distance) {return cumDistance + distance; });
+
+            std::transform(obj.features.begin(), obj.features.end(), nearestOutsideClass->begin(), featureDistances.begin(),
+                [](double feature1, double feature2)
+                {return (feature1 - feature2 < 0) ? feature2 - feature1 : feature1 - feature2; });
+
+            std::transform(MOCFD.begin(), MOCFD.end(), featureDistances.begin(), MOCFD.begin(),
+                [](double cumDistance, double distance) {return cumDistance + distance; });
         }
 
-        reduceDimensionality(dataset);
+        size_t numClassInstances = pair.second.size();
+        std::transform(MWCFD.begin(), MWCFD.end(), MWCFD.begin(), [numClassInstances](double cumDistance) {return cumDistance / numClassInstances; });
+        std::transform(MOCFD.begin(), MOCFD.end(), MOCFD.begin(), [numClassInstances](double cumDistance) {return cumDistance / numClassInstances; });
 
-        classMap = groupByClass(dataset);
+        if (MODEL_STATE.featureWeights[pair.first].size() != numFeatures) {
+            MODEL_STATE.featureWeights[pair.first].resize(numFeatures);
+        }
+
+        std::transform(MOCFD.begin(), MOCFD.end(), MWCFD.begin(), MODEL_STATE.featureWeights[pair.first].begin(),
+            [](double outsideMeanDistance, double withinMeanDistance)
+            {return std::max((outsideMeanDistance / withinMeanDistance) - 1.0, 0.0); });
+    }
+}
+
+std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset, bool applyPCA) {
+    // Z-score standardization of features
+    standardizeFeatures(dataset);
+   
+    bool weighted = !(applyPCA && dataset.begin()->second[0].features.size() >= 3);
+    if (!weighted) {
+        reduceDimensionality(dataset);
+    }
+    else {
+        weightFeatures(dataset);
     }
 
     // compute k nearest distance, k = 1
     std::unordered_map<std::string, std::vector<double> > classNNDistMap;
     std::vector<std::thread> threads;
     
-    for (const auto& pair : classMap) {
-        std::thread t(computeNearestNeighborDistances, std::cref(classMap), std::ref(classNNDistMap), pair.first);
+    for (const auto& pair : dataset) {
+        std::thread t(computeNearestNeighborDistances, std::cref(dataset), std::ref(classNNDistMap), pair.first, weighted);
         threads.push_back(std::move(t));
     }
 
@@ -221,8 +306,7 @@ std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassM
 
     std::vector<std::string> warningClasses;
 
-    for (const auto& pair : classMap) {
-        const auto& currClass = pair.first; 
+    for (const std::string& currClass : MODEL_STATE.classNames) { 
         auto distance_it = classNNDistMap.find(currClass);
         const std::vector<double>& distances = distance_it->second;
         double minDistance = *std::min_element(distances.begin(), distances.end());
@@ -238,7 +322,7 @@ std::unordered_map<std::string, std::vector<double> > process(std::vector<ClassM
     }
 
     // Save all datapoints for each class
-    MODEL_STATE.classMap = std::move(classMap);
+    MODEL_STATE.classMap = std::move(dataset);
 
     // sort distances in ascending order
     for (auto& pair : classNNDistMap) {

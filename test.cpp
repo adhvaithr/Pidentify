@@ -22,46 +22,6 @@
 #include "test.h"
 #include "CSVWrite.hpp"
 
-// Helper function to fill the k sets to a certain amount per set
-void fillFoldToLimit(std::uniform_int_distribution<>& distrib, std::mt19937& gen, int fillLimit,
-	std::vector<ClassMember>& dataset, size_t start, std::vector<ClassMember> kSets[]) {
-	bool foldFull[K_FOLDS] = { false };
-
-	size_t foldOriginalSizes[K_FOLDS];
-	for (int i = 0; i < K_FOLDS; ++i) {
-		foldOriginalSizes[i] = kSets[i].size();
-	}
-
-	int iSet;
-	for (size_t iData = start; iData < std::min(start + fillLimit * K_FOLDS, dataset.size()); ++iData) {
-		do {
-			iSet = distrib(gen);
-		} while (foldFull[iSet]);
-
-		kSets[iSet].push_back(std::move(dataset[iData]));
-
-		if (kSets[iSet].size() == foldOriginalSizes[iSet] + fillLimit) {
-			foldFull[iSet] = true;
-		}
-	}
-}
-
-// Split dataset into k sets
-void kFoldSplit(std::vector<ClassMember>& dataset, std::vector<ClassMember> kSets[]) {
-	// Create random number generator
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> distrib(0, K_FOLDS - 1);
-
-	int minElems = dataset.size() / K_FOLDS;
-
-	// Evenly divide largest multiple of K_FOLDS possible among the k sets
-	fillFoldToLimit(distrib, gen, minElems, dataset, 0, kSets);
-
-	// Place remainder into the sets with each set receiving at most one extra datapoint
-	fillFoldToLimit(distrib, gen, 1, dataset, minElems * K_FOLDS, kSets);
-}
-
 // Create default p value thresholds from constants and 1/(m * n) where n is the number of datapoints in the largest class
 // and m is some multiplier
 std::vector<double> createPValueThresholds(std::unordered_map<std::string, double[5]>& predictionStatistics) {
@@ -100,6 +60,9 @@ std::vector<double> createPValueThresholds(std::unordered_map<std::string, doubl
 }
 
 std::vector<ClassMember> normalize(std::vector<ClassMember> dataset) {
+	if (!MODEL_STATE.zeroStdDeviation.empty()) {
+		removeFeatures(MODEL_STATE.zeroStdDeviation, dataset);
+	}
 	size_t numFeatures = dataset[0].features.size();
 	for (auto& obj : dataset) {
 		if (obj.features.size() != numFeatures) {
@@ -107,11 +70,33 @@ std::vector<ClassMember> normalize(std::vector<ClassMember> dataset) {
 			std::exit(0);
 		}
 		for (size_t i = 0; i < numFeatures; ++i) {
-			obj.features[i] = (obj.features[i] - MODEL_STATE.featureMeans[i]) / MODEL_STATE.minRadius;
+			obj.features[i] = (obj.features[i] - MODEL_STATE.means[i]) / MODEL_STATE.sigmas[i];
 		}
 	}
 
 	return dataset;
+}
+
+void copyDatapoints(std::vector<ClassMember>& dataset, alglib::real_2d_array& datapoints, bool to_alglib_array) {
+	size_t npoints = dataset.size();
+	size_t nvars = dataset[0].features.size();
+	size_t projectionDim = datapoints.cols();
+
+	if (to_alglib_array) {
+		for (size_t i = 0; i < npoints; ++i) {
+			for (size_t j = 0; j < nvars; ++j) {
+				datapoints[i][j] = dataset[i].features[j];
+			}
+		}
+	}
+	else {
+		for (size_t i = 0; i < npoints; ++i) {
+			for (size_t j = 0; j < projectionDim; ++j) {
+				dataset[i].features[j] = datapoints[i][j];
+			}
+			dataset[i].features.resize(projectionDim);
+		}
+	}
 }
 
 // Project test dataset into lower dimension subspace
@@ -126,13 +111,15 @@ void toPCASubspace(std::vector<ClassMember>& dataset) {
 
 // Calculate the minimum distance between the datapoints in the test set with each class
 void computeClassDistances(const std::vector<ClassMember>& dataset, std::vector<std::unordered_map<std::string, double> >& nnDistances,
-	size_t start, size_t stop) {
+	size_t start, size_t stop, bool weighted) {
 	for (size_t i = start; i < stop; ++i) {
 		double minDistance = std::numeric_limits<double>::max();
 		std::unordered_map<std::string, double> classDistance;
 		for (const auto& pair : MODEL_STATE.classMap) {
 			for (const auto& classDatapoint : pair.second) {
-				double distance = euclideanDistance(dataset[i].features, classDatapoint.features);
+				double distance = (weighted) ?
+					weightedEuclideanDistance(dataset[i].features, classDatapoint.features, MODEL_STATE.featureWeights.at(pair.first)) :
+					euclideanDistance(dataset[i].features, classDatapoint.features);
 				if (distance < minDistance) {
 					minDistance = distance;
 				}
@@ -542,8 +529,8 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 
 	std::vector<ClassMember> normalizedDataset = normalize(dataset);
 
-	
-	if (applyPCA && dataset[0].features.size() >= 3) {
+	bool weighted = !(applyPCA && dataset[0].features.size() >= 3);
+	if (!weighted) {
 		toPCASubspace(normalizedDataset);
 	}
 
@@ -562,7 +549,7 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 			stop = std::min(normalizedDataset.size(), stop + datapointsPerThread);
 		}
 
-		threads.emplace_back(std::thread{ computeClassDistances, std::cref(normalizedDataset), std::ref(nnDistances), start, stop });
+		threads.emplace_back(std::thread{ computeClassDistances, std::cref(normalizedDataset), std::ref(nnDistances), start, stop, weighted });
 
 		++i;
 		start = stop;
