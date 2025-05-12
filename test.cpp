@@ -131,7 +131,7 @@ std::vector<ClassMember> standardize(std::vector<ClassMember> dataset) {
 			std::exit(0);
 		}
 		for (size_t i = 0; i < numFeatures; ++i) {
-			obj.features[i] = (obj.features[i] - MODEL_STATE.featureMeans[i]) / MODEL_STATE.minRadius;
+			obj.features[i] = (obj.features[i] - MODEL_STATE.means[i]) / MODEL_STATE.sigmas[i];
 		}
 	}
 
@@ -172,7 +172,7 @@ void toPCASubspace(std::vector<ClassMember>& dataset) {
 
 // Calculate the minimum distance between the datapoints in the test set with each class
 void computeClassDistances(const std::vector<ClassMember>& dataset, std::vector<std::unordered_map<std::string, double> >& nnDistances,
-	size_t start, size_t stop) {
+	size_t start, size_t stop, bool weighted) {
 	for (size_t i = start; i < stop; ++i) {
 		std::unordered_map<std::string, double> classDistance;
 		for (const auto& pair : MODEL_STATE.classMap) {
@@ -1027,8 +1027,8 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 		toPCASubspace(standardizedDataset);
 	}
 
-	
-	if (applyPCA && dataset[0].features.size() >= 3) {
+	bool weighted = !(applyPCA && dataset[0].features.size() >= 3);
+	if (!weighted) {
 		toPCASubspace(normalizedDataset);
 	}
 
