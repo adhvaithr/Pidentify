@@ -152,27 +152,39 @@ void reduceDimensionality(std::unordered_map<std::string, std::vector<ClassMembe
     alglib::real_2d_array principalComponents;
     size_t npoints = MODEL_STATE.trainDatasetSize;
     size_t nvars = dataset.begin()->second[0].features.size();
-    alglib::ae_int_t nneeded = 3, eps = 0, maxits = 0;
 
     datapoints.setlength(npoints, nvars);
-    variance.setlength(nneeded);
-    principalAxes.setlength(nvars, nneeded);
-    principalComponents.setlength(npoints, nneeded);
+    variance.setlength(nvars);
+    principalAxes.setlength(nvars, nvars);
 
     // Copy data into ALGLIB array
     copyDatapoints(dataset, datapoints, true);
 
     // Find the principal axes
-    alglib::pcatruncatedsubspace(datapoints, nneeded, eps, maxits, variance, principalAxes);
+    alglib::pcabuildbasis(datapoints, variance, principalAxes);
+
+    size_t basisDimension = 0;
+
+    for (size_t i = 0; variance[i++] > 0.1; ++basisDimension) {}
+
+    alglib::real_2d_array newBasis;
+    newBasis.setlength(nvars, basisDimension);
+    principalComponents.setlength(npoints, basisDimension);
+    for (size_t i = 0; i < nvars; ++i) {
+        for (size_t j = 0; j < basisDimension; ++j) {
+            newBasis[i][j] = principalAxes[i][j];
+        }
+    }
 
     // Project dataset into lower dimension
-    projectOntoPrincipalAxes(datapoints, principalAxes, principalComponents);
+    projectOntoPrincipalAxes(datapoints, newBasis, principalComponents);
 
     // Copy from ALGLIB array into vector of ClassMember objects
     copyDatapoints(dataset, principalComponents, false);
 
     // Save principal axes for reducing dimensionality of test set
-    MODEL_STATE.principalAxes = std::move(principalAxes);
+    MODEL_STATE.principalAxes.setlength(nvars, basisDimension);
+    MODEL_STATE.principalAxes = std::move(newBasis);
 }
 
 double euclideanDistance(const std::vector<double>& a, const std::vector<double>& b) {
@@ -192,12 +204,12 @@ double weightedEuclideanDistance(const std::vector<double>& a, const std::vector
 }
 
 void computeNearestNeighborDistances(const std::unordered_map<std::string, std::vector<ClassMember> >& classMap,
-    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className, bool weighted) {
+    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className) {
     for (const auto& obj : classMap.at(className)) {
         double minDistance = std::numeric_limits<double>::max();
         for (const auto& neighbor : classMap.at(className)) {
             if (&obj != &neighbor) {
-                double distance = (weighted) ?
+                double distance = (MODEL_STATE.processType == "featureWeighting") ?
                     weightedEuclideanDistance(obj.features, neighbor.features, MODEL_STATE.featureWeights.at(className)) :
                     euclideanDistance(obj.features, neighbor.features);
                 if (distance < minDistance) {
@@ -279,15 +291,14 @@ void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMembe
     }
 }
 
-std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset, bool applyPCA) {
+std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
     // Z-score standardization of features
     standardizeFeatures(dataset);
-   
-    bool weighted = !(applyPCA && dataset.begin()->second[0].features.size() >= 3);
-    if (!weighted) {
+
+    if (MODEL_STATE.processType == "PCA") {
         reduceDimensionality(dataset);
     }
-    else {
+    else if (MODEL_STATE.processType == "featureWeighting") {
         weightFeatures(dataset);
     }
 
@@ -296,7 +307,7 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
     std::vector<std::thread> threads;
     
     for (const auto& pair : dataset) {
-        std::thread t(computeNearestNeighborDistances, std::cref(dataset), std::ref(classNNDistMap), pair.first, weighted);
+        std::thread t(computeNearestNeighborDistances, std::cref(dataset), std::ref(classNNDistMap), pair.first);
         threads.push_back(std::move(t));
     }
 

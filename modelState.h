@@ -20,6 +20,7 @@ struct ModelState {
 	size_t trainDatasetSize;
 	std::vector<std::string> classNames;
 	std::unordered_map<std::string, std::vector<double> > featureWeights;
+	std::string processType;
 };
 
 extern ModelState MODEL_STATE;

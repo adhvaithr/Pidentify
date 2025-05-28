@@ -111,13 +111,13 @@ void toPCASubspace(std::vector<ClassMember>& dataset) {
 
 // Calculate the minimum distance between the datapoints in the test set with each class
 void computeClassDistances(const std::vector<ClassMember>& dataset, std::vector<std::unordered_map<std::string, double> >& nnDistances,
-	size_t start, size_t stop, bool weighted) {
+	size_t start, size_t stop) {
 	for (size_t i = start; i < stop; ++i) {
 		double minDistance = std::numeric_limits<double>::max();
 		std::unordered_map<std::string, double> classDistance;
 		for (const auto& pair : MODEL_STATE.classMap) {
 			for (const auto& classDatapoint : pair.second) {
-				double distance = (weighted) ?
+				double distance = (MODEL_STATE.processType == "featureWeighting") ?
 					weightedEuclideanDistance(dataset[i].features, classDatapoint.features, MODEL_STATE.featureWeights.at(pair.first)) :
 					euclideanDistance(dataset[i].features, classDatapoint.features);
 				if (distance < minDistance) {
@@ -511,7 +511,7 @@ void printClassCounts(const std::unordered_map<std::string, double>& classCounts
 
 void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics, std::unordered_map<std::string, double[3]>& predictionStatisticsPerClass,
     std::unordered_map<std::string, double>& numInstancesPerClass,
-	size_t fold, bool applyPCA, double pvalueThreshold, bool bestFitFunctionsToCSV,
+	size_t fold, double pvalueThreshold, bool bestFitFunctionsToCSV,
 	const std::string& bestFitFunctionsCSVFilename, bool pValuesToCSV, const std::string& pValuesCSVFilename,
 	bool summaryToCSV, const std::string& summaryCSVFilename) {
 	// Create p value thresholds if none are provided by the user
@@ -529,8 +529,7 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 
 	std::vector<ClassMember> normalizedDataset = normalize(dataset);
 
-	bool weighted = !(applyPCA && dataset[0].features.size() >= 3);
-	if (!weighted) {
+	if (MODEL_STATE.processType == "PCA") {
 		toPCASubspace(normalizedDataset);
 	}
 
@@ -549,7 +548,7 @@ void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::strin
 			stop = std::min(normalizedDataset.size(), stop + datapointsPerThread);
 		}
 
-		threads.emplace_back(std::thread{ computeClassDistances, std::cref(normalizedDataset), std::ref(nnDistances), start, stop, weighted });
+		threads.emplace_back(std::thread{ computeClassDistances, std::cref(normalizedDataset), std::ref(nnDistances), start, stop });
 
 		++i;
 		start = stop;

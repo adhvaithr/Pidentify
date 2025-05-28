@@ -7,7 +7,7 @@
 #include <string>
 #include <ap.h>
 
-std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset, bool applyPCA);
+std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset);
 double euclideanDistance(const std::vector<double>& a, const std::vector<double>& b);
 double weightedEuclideanDistance(const std::vector<double>& a, const std::vector<double>& b, const std::vector<double>& weights);
 void removeFeatures(const std::vector<size_t>& indices, std::vector<ClassMember>& dataset);

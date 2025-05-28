@@ -76,7 +76,7 @@ void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& data
     for (auto iter = dataset.begin(); iter != dataset.end();) {
         auto& members = iter->second;
         if (members.size() < K_FOLDS) {
-            dataset.erase(iter);
+            iter = dataset.erase(iter);
             continue;
         }
         std::shuffle(members.begin(), members.end(), gen);
@@ -84,8 +84,11 @@ void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& data
             members.resize(maxPerClass);
         }
         distributeAcrossFolds(iter, kSets);
+        MODEL_STATE.classNames.push_back(iter->first);
         ++iter;
     }
+
+    std::sort(MODEL_STATE.classNames.begin(), MODEL_STATE.classNames.end());
 }
 
 std::unordered_map<std::string, std::vector<ClassMember> > readFormattedDataset(const std::string& filename) {
@@ -122,11 +125,6 @@ std::unordered_map<std::string, std::vector<ClassMember> > readFormattedDataset(
         dataset[obj.name].push_back(obj);
     }
     file.close();
-
-    for (const auto& pair : dataset) {
-        MODEL_STATE.classNames.push_back(pair.first);
-    }
-    std::sort(MODEL_STATE.classNames.begin(), MODEL_STATE.classNames.end());
 
     return dataset;
 }
@@ -197,8 +195,9 @@ int main(int argc, char* argv[]) {
     bool summaryToCSV = std::atoi(argv[5]);
     std::string summaryCSVFilename = argv[6];
     bool applyPCA = std::atoi(argv[7]);
-    double pvalueThreshold = (std::atof(argv[8]) > 0) ? std::atof(argv[8]) : -1;
-    std::string datasetFilename = argv[9];
+    bool applyFeatureWeighting = std::atoi(argv[8]);
+    double pvalueThreshold = (std::atof(argv[9]) > 0) ? std::atof(argv[9]) : -1;
+    std::string datasetFilename = argv[10];
 
     std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);
 
@@ -211,6 +210,17 @@ int main(int argc, char* argv[]) {
     std::unordered_map<std::string, double[3]> predictionStatisticsPerClass;
     std::unordered_map<std::string, double> numInstancesPerClass;
 
+    // Set what type of processing will occur
+    if (applyPCA && dataset.begin()->second[0].features.size() >= 3) {
+        MODEL_STATE.processType = "PCA";
+    }
+    else if (applyFeatureWeighting) {
+        MODEL_STATE.processType = "featureWeighting";
+    }
+    else {
+        MODEL_STATE.processType = "default";
+    }
+    
     for (int i = 0; i < K_FOLDS; ++i) {
         std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
         
@@ -226,7 +236,7 @@ int main(int argc, char* argv[]) {
         
         std::cout << "Iteration " << i << ":\n";
 
-        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset, applyPCA);
+        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset);
 
         fitClasses(sorted_distances);
 
@@ -237,7 +247,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        test(testDataset, predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i, applyPCA,
+        test(testDataset, predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i,
             pvalueThreshold, bestFitFunctionsToCSV, bestFitFunctionsCSVFilename, pValuesToCSV, pValuesCSVFilename,
             summaryToCSV, summaryCSVFilename);
     }
