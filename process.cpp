@@ -204,27 +204,54 @@ double weightedEuclideanDistance(const std::vector<double>& a, const std::vector
 }
 
 void computeNearestNeighborDistances(const std::unordered_map<std::string, std::vector<ClassMember> >& classMap,
-    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className) {
+    std::unordered_map<std::string, std::vector<double> >& classNNDistMap, std::string className,
+    std::unordered_map<std::string, std::vector<ClassMember> >& filteredDataset, int k, int l) {
     for (const auto& obj : classMap.at(className)) {
-        double minDistance = std::numeric_limits<double>::max();
-        for (const auto& neighbor : classMap.at(className)) {
-            if (&obj != &neighbor) {
-                double distance = (MODEL_STATE.processType == "featureWeighting") ?
-                    weightedEuclideanDistance(obj.features, neighbor.features, MODEL_STATE.featureWeights.at(className)) :
-                    euclideanDistance(obj.features, neighbor.features);
-                if (distance < minDistance) {
-                    minDistance = distance;
+        // double minDistance = std::numeric_limits<double>::max();
+        std::vector<std::pair<double, std::string>> distances;
+
+
+        for (const auto& pair : classMap) {
+            const std::string& currClass = pair.first;
+            const std::vector<ClassMember>& members = pair.second;
+            for (const auto& neighbor : members) {
+                if (&obj != &neighbor) {
+                    double distance = (MODEL_STATE.processType == "featureWeighting") ?
+                        weightedEuclideanDistance(obj.features, neighbor.features, MODEL_STATE.featureWeights.at(className)) :
+                        euclideanDistance(obj.features, neighbor.features);
+                    distances.emplace_back(distance, currClass);
                 }
             }
         }
 
-        // Record nearest neighbor distance
-        m.lock();
-        classNNDistMap[className].push_back(minDistance);
-        m.unlock();
+
+        std::sort(distances.begin(), distances.end(),[](const std::pair<double, std::string>& d1, const std::pair<double, std::string>& d2)
+            { return d1.first < d2.first; });
         
+        int sameClassNum = 0;
+        for (int i = 0; i < std::min(k, static_cast<int>(distances.size())); i+=1) {
+            if (distances[i].second == className) {
+                sameClassNum += 1;
+            }
+        }
+
+
+        if (sameClassNum >= l) {
+            double minDistance = distances[0].first;
+
+            // Record nearest neighbor distance
+            m.lock();
+            classNNDistMap[className].push_back(minDistance);
+            m.unlock();
+            m.lock();
+            filteredDataset[className].push_back(obj);
+            m.unlock();
+        }
     }
 }
+
+
+
 
 void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
     size_t numFeatures = dataset.begin()->second[0].features.size();
@@ -291,57 +318,70 @@ void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMembe
     }
 }
 
-std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset) {
-    // Z-score standardization of features
-    standardizeFeatures(dataset);
+std::unordered_map<std::string, std::vector<double> > process(std::unordered_map<std::string, std::vector<ClassMember> >& dataset,
+   std::unordered_map<std::string, std::vector<ClassMember> >& filteredDataset, int numNeighborsChecked, int minSameClassCount){
+   // Z-score standardization of features
+   standardizeFeatures(dataset);
 
-    if (MODEL_STATE.processType == "PCA") {
-        reduceDimensionality(dataset);
-    }
-    else if (MODEL_STATE.processType == "featureWeighting") {
-        weightFeatures(dataset);
-    }
 
-    // compute k nearest distance, k = 1
-    std::unordered_map<std::string, std::vector<double> > classNNDistMap;
-    std::vector<std::thread> threads;
-    
-    for (const auto& pair : dataset) {
-        std::thread t(computeNearestNeighborDistances, std::cref(dataset), std::ref(classNNDistMap), pair.first);
-        threads.push_back(std::move(t));
-    }
+   if (MODEL_STATE.processType == "PCA") {
+       reduceDimensionality(dataset);
+   }
+   else if (MODEL_STATE.processType == "featureWeighting") {
+       weightFeatures(dataset);
+   }
 
-    for (auto& t : threads) {
-        t.join();
-    }
 
-    std::vector<std::string> warningClasses;
+   // compute k nearest distance, k = 1
+   std::unordered_map<std::string, std::vector<double> > classNNDistMap;
+   std::vector<std::thread> threads;
 
-    for (const std::string& currClass : MODEL_STATE.classNames) { 
-        auto distance_it = classNNDistMap.find(currClass);
-        const std::vector<double>& distances = distance_it->second;
-        double minDistance = *std::min_element(distances.begin(), distances.end());
-        if (minDistance > 1.0) {
-            warningClasses.push_back(currClass);
-        }
-    }
-    if (warningClasses.size() > 0) {
-        std::cout << "Nearest neighbor distances are greater than 1 for these classes: ";
-        std::copy(warningClasses.begin(), warningClasses.end(), std::ostream_iterator<std::string>(std::cout, ", "));
-        std::cout << std::endl;
 
-    }
+   for (const auto& pair : dataset) {
+       std::thread t(computeNearestNeighborDistances, std::cref(dataset), std::ref(classNNDistMap), pair.first, std::ref(filteredDataset), numNeighborsChecked, minSameClassCount);
+       threads.push_back(std::move(t));
+   }
 
-    // Save all datapoints for each class
-    MODEL_STATE.classMap = std::move(dataset);
 
-    // sort distances in ascending order
-    for (auto& pair : classNNDistMap) {
-        std::sort(pair.second.begin(), pair.second.end());
+   for (auto& t : threads) {
+       t.join();
+   }
 
-        // eliminate duplicated results
-        pair.second.erase(unique(pair.second.begin(), pair.second.end()), pair.second.end());
-    }
 
-    return classNNDistMap;
+   std::vector<std::string> warningClasses;
+
+
+   for (const std::string& currClass : MODEL_STATE.classNames) {
+       auto distance_it = classNNDistMap.find(currClass);
+       const std::vector<double>& distances = distance_it->second;
+       double minDistance = *std::min_element(distances.begin(), distances.end());
+       if (minDistance > 1.0) {
+           warningClasses.push_back(currClass);
+       }
+   }
+   if (warningClasses.size() > 0) {
+       std::cout << "Nearest neighbor distances are greater than 1 for these classes: ";
+       std::copy(warningClasses.begin(), warningClasses.end(), std::ostream_iterator<std::string>(std::cout, ", "));
+       std::cout << std::endl;
+
+
+   }
+
+
+   // Save all datapoints for each class
+   MODEL_STATE.classMap = std::move(dataset);
+
+
+   // sort distances in ascending order
+   for (auto& pair : classNNDistMap) {
+       std::sort(pair.second.begin(), pair.second.end());
+
+
+       // eliminate duplicated results
+       pair.second.erase(unique(pair.second.begin(), pair.second.end()), pair.second.end());
+   }
+
+
+   return classNNDistMap;
 }
+
