@@ -19,37 +19,15 @@
 #include "classMember.h"
 #include "test.h"
 #include "modelState.h"
+#include "testResults.h"
 
 using namespace std;
 
 ModelState MODEL_STATE;
+TestResults TEST_RESULTS;
 std::mutex m;
 double NUM_THREADS;
 int K_FOLDS = 10;
-
-/*Limit number of instances in each class */
-std::vector<ClassMember> trimmedDataset(const std::vector<ClassMember>& dataset, size_t maxPerClass = 1000) {
-    std::unordered_map<std::string, std::vector<ClassMember>> classCountMap;
-    for (const auto& member : dataset) {
-        classCountMap[member.name].push_back(member);
-    }
-
-    std::vector<ClassMember> trimmed;
-    std::random_device rand_d;
-
-    std::mt19937 gen(rand_d());
-
-    for (auto& currClass : classCountMap) {
-        auto& members = currClass.second;
-        if (members.size() > maxPerClass) {
-            std::shuffle(members.begin(), members.end(), gen);
-            trimmed.insert(trimmed.end(), members.begin(), members.begin() + maxPerClass);
-        } else {
-            trimmed.insert(trimmed.end(), members.begin(), members.end());
-        }
-    }
-    return trimmed;
-}
 
 void distributeAcrossFolds(const std::unordered_map<std::string, std::vector<ClassMember> >::const_iterator& datasetIter, std::unordered_map<std::string, std::vector<ClassMember> > kSets[]) {
     auto& datapoints = datasetIter->second;
@@ -85,6 +63,7 @@ void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& data
         }
         distributeAcrossFolds(iter, kSets);
         MODEL_STATE.classNames.push_back(iter->first);
+        MODEL_STATE.numInstancesPerClass[iter->first] = members.size();
         ++iter;
     }
 
@@ -150,58 +129,58 @@ bool isNonnegativeDouble(char* value) {
 }
 
 int main(int argc, char* argv[]) {
-   // Command line arguments can optionally include the p value threshold and write p values to a CSV
-   /*
-   double pvalueThreshold = -1;
-   bool pValuesToCSV = false;
-   std::string datasetFilename, pValuesCSVFilename;
-   for (int i = 1; i < argc; ++i) {
-       if (std::strcmp(argv[i], "--pvalues_to_csv") == 0) {
-           pValuesToCSV = true;
-           ++i;
-           if (i < argc - 1)
-               pValuesCSVFilename = argv[i];
-           else {
-               std::cerr << "ERROR: Filename to write p values to was not provided.\n";
-               return 0;
-           }
-       }
-       else if (std::strcmp(argv[i], "-H") == 0) {
-           std::cout << "Format: executable [--pvalues_to_csv filename] [pvalueThreshold] datasetFilepath\n";
-           std::cout << "Example: ./cpv.exe --pvalues_to_csv result.csv 0.50 dataset.csv\n";
-           return 0;
-       }
-       else if (i == argc - 2) {
-           if (!isNonnegativeDouble(argv[i])) {
-               std::cerr << "ERROR: pvalueThreshold must be nonnegative double.\n";
-               return 0;
-           }
-           pvalueThreshold = std::atof(argv[i]);
-       }
-       else
-           datasetFilename = argv[i];
-   }
+    // Command line arguments can optionally include the p value threshold and write p values to a CSV
+    /*
+    double pvalueThreshold = -1;
+    bool pValuesToCSV = false;
+    std::string datasetFilename, pValuesCSVFilename;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--pvalues_to_csv") == 0) {
+            pValuesToCSV = true;
+            ++i;
+            if (i < argc - 1)
+                pValuesCSVFilename = argv[i];
+            else {
+                std::cerr << "ERROR: Filename to write p values to was not provided.\n";
+                return 0;
+            }
+        }
+        else if (std::strcmp(argv[i], "-H") == 0) {
+            std::cout << "Format: executable [--pvalues_to_csv filename] [pvalueThreshold] datasetFilepath\n";
+            std::cout << "Example: ./cpv.exe --pvalues_to_csv result.csv 0.50 dataset.csv\n";
+            return 0;
+        }
+        else if (i == argc - 2) {
+            if (!isNonnegativeDouble(argv[i])) {
+                std::cerr << "ERROR: pvalueThreshold must be nonnegative double.\n";
+                return 0;
+            }
+            pvalueThreshold = std::atof(argv[i]);
+        }
+        else
+            datasetFilename = argv[i];
+    }
 
 
-   if (datasetFilename == "") {
-       std::cerr << "ERROR: No dataset provided.\n";
-       return 0;
-   }
-   */
+    if (datasetFilename == "") {
+        std::cerr << "ERROR: No dataset provided.\n";
+        return 0;
+    }
+    */
 
-
-   bool bestFitFunctionsToCSV = std::atoi(argv[1]);
-   std::string bestFitFunctionsCSVFilename = argv[2];
-   bool pValuesToCSV = std::atoi(argv[3]);
-   std::string pValuesCSVFilename = argv[4];
-   bool summaryToCSV = std::atoi(argv[5]);
-   std::string summaryCSVFilename = argv[6];
-   bool applyPCA = std::atoi(argv[7]);
-   bool applyFeatureWeighting = std::atoi(argv[8]);
-   double pvalueThreshold = (std::atof(argv[9]) > 0) ? std::atof(argv[9]) : -1;
-   int numNeighborsChecked = std::atoi(argv[10]);
-   int minSameClassCount = std::atoi(argv[11]);
-   std::string datasetFilename = argv[12];
+    
+    bool bestFitFunctionsToCSV = std::atoi(argv[1]);
+    std::string bestFitFunctionsCSVFilename = argv[2];
+    bool pValuesToCSV = std::atoi(argv[3]);
+    std::string pValuesCSVFilename = argv[4];
+    bool summaryToCSV = std::atoi(argv[5]);
+    std::string summaryCSVFilename = argv[6];
+    bool applyPCA = std::atoi(argv[7]);
+    bool applyFeatureWeighting = std::atoi(argv[8]);
+    TEST_RESULTS.pvalueThreshold = (std::atof(argv[9]) >= 0) ? std::atof(argv[9]) : -1;
+    int numNeighborsChecked = std::atoi(argv[10]);
+    int minSameClassCount = std::atoi(argv[11]);
+    std::string datasetFilename = argv[12];
   
 
     std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);
@@ -209,12 +188,6 @@ int main(int argc, char* argv[]) {
     kFoldSplit(dataset, kSets, 1000);
 
     setThreads();
-
-
-    std::unordered_map<std::string, double[5]> predictionStatistics;
-    std::unordered_map<std::string, double[3]> predictionStatisticsPerClass;
-    std::unordered_map<std::string, double> numInstancesPerClass;
-
 
     // Set what type of processing will occur
     if (applyPCA && dataset.begin()->second[0].features.size() >= 3) {
@@ -241,43 +214,37 @@ int main(int argc, char* argv[]) {
         }
         
         std::cout << "Iteration " << i << ":\n";
-        std::unordered_map<std::string, std::vector<ClassMember> > filteredDataset;
-        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset, filteredDataset,numNeighborsChecked, minSameClassCount);
 
-
-        fitClasses(sorted_distances);
-
-
-        std::vector<ClassMember> testDataset;
-        for (const auto& pair : kSets[i]) {
-            for (const auto& obj : pair.second) {
-                testDataset.push_back(obj);
-            }
-        }
-
-
-        test(testDataset, predictionStatistics, predictionStatisticsPerClass, numInstancesPerClass, i,
-            pvalueThreshold, bestFitFunctionsToCSV, bestFitFunctionsCSVFilename, pValuesToCSV, pValuesCSVFilename,
-            summaryToCSV, summaryCSVFilename);
-        
-        std::cout << "Original dataset sizes:\n";
+        std::cout << "Original training dataset sizes:\n";
         int totalDatasetPoints = 0;
-        for (const auto& pair : dataset) {
+        for (const auto& pair : trainDataset) {
             std::cout << "Class " << pair.first << ": " << pair.second.size() << " instances\n";
             totalDatasetPoints += pair.second.size();
         }
         std::cout << "Total in dataset: " << totalDatasetPoints << "\n";
 
+        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset,
+            numNeighborsChecked, minSameClassCount);
 
-        std::cout << "\nFiltered dataset sizes:\n";
+        // Print out difference in dataset sizes between the original and filtered training dataset
+        std::cout << "\nFiltered training dataset sizes:\n";
         int totalFilteredPoints = 0;
-        for (const auto& pair : filteredDataset) {
+        for (const auto& pair : MODEL_STATE.classMap) {
             std::cout << "Class " << pair.first << ": " << pair.second.size() << " instances\n";
             totalFilteredPoints += pair.second.size();
         }
-        std::cout << "Total in filteredDataset: " << totalFilteredPoints << "\n";
+        std::cout << "Total in filteredDataset: " << totalFilteredPoints << "\n\n";
 
-
+        fitClasses(sorted_distances);
+        
+        std::vector<ClassMember> testDataset;
+        for (const auto& pair : kSets[i]) {
+            testDataset.reserve(testDataset.size() + pair.second.size());
+            testDataset.insert(testDataset.end(), pair.second.begin(), pair.second.end());
+        }
+        
+        test(testDataset, i, bestFitFunctionsToCSV, bestFitFunctionsCSVFilename, pValuesToCSV, pValuesCSVFilename,
+            summaryToCSV, summaryCSVFilename);
     }
 }
 
