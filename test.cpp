@@ -734,6 +734,7 @@ void calculateHyperspaceNOTAPointsSummary(NOTACategory NOTALoc) {
 		TEST_RESULTS.overallHyperspacePredStats[NOTALoc][i] /= MODEL_STATE.datasetSize;
 		TEST_RESULTS.overallHyperspacePredStats[NOTALoc][i] *= 100;
 	}
+}
 
 	// Calculate number of true negatives and recall for NOTA points
 	double* randomPoints = TEST_RESULTS.hyperspaceRandomPoints[NOTALoc];
@@ -1028,7 +1029,7 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 	}
 
 	if (MODEL_STATE.processType == "PCA") {
-		toPCASubspace(normalizedDataset);
+		toPCASubspace(standardizedDataset);
 	}
 
 	// Find the nearest neighbor distance to each class
