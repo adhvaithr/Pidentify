@@ -1,0 +1,194 @@
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <cstring>
+#include <vector>
+#include <unordered_map>
+#include <random>
+#include <algorithm>
+
+#include "runFull.h"
+#include "classMember.h"
+#include "modelState.h"
+#include "testResults.h"
+#include "cachePaths.h"
+#include "process.h"
+#include "fit.h"
+#include "test.h"
+
+std::unordered_map<std::string, std::vector<ClassMember> > createTrainDataset(
+    std::unordered_map<std::string, std::vector<ClassMember> > kSets[], size_t fold) {
+    std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
+    size_t pointsPerFold = MAX_CLASS_MEMBERS / (K_FOLDS - 1);
+    size_t remainder = MAX_CLASS_MEMBERS - (pointsPerFold * (K_FOLDS - 1));
+    std::random_device rand_d;
+    std::mt19937 gen(rand_d());
+
+    for (const std::string& className : MODEL_STATE.classNames) {
+        std::vector<ClassMember>& classTrainData = trainDataset[className];
+        size_t availablePoints = MODEL_STATE.numInstancesPerClass.at(className) - kSets[fold].at(className).size();
+        if (availablePoints > MAX_CLASS_MEMBERS) {
+            classTrainData.reserve(MAX_CLASS_MEMBERS);
+            size_t extraDatapoints = remainder;
+            for (size_t i = 0; i < K_FOLDS; ++i) {
+                if (i != fold) {
+                    std::vector<ClassMember>& classData = kSets[i].at(className);
+                    size_t numInsertPoints = ((classData.size() == pointsPerFold) || (extraDatapoints == 0)) ? pointsPerFold : pointsPerFold + 1;
+                    if (classData.size() > numInsertPoints) {
+                        std::shuffle(classData.begin(), classData.end(), gen);
+                    }
+                    if (extraDatapoints > 0) {
+                        --extraDatapoints;
+                    }
+                    classTrainData.insert(classTrainData.end(), classData.begin(), classData.begin() + numInsertPoints);
+                }
+            }
+        }
+        else {
+            classTrainData.reserve(availablePoints);
+            for (size_t i = 0; i < K_FOLDS; ++i) {
+                if (i != fold) {
+                    std::vector<ClassMember>& classData = kSets[i].at(className);
+                    classTrainData.insert(classTrainData.end(), classData.begin(), classData.end());
+                }
+            }
+        }
+    }
+
+    return trainDataset;
+}
+
+std::unordered_map<std::string, std::vector<ClassMember> > readFormattedDataset(const std::string& filename) {
+    std::unordered_map<std::string, std::vector<ClassMember> > dataset;
+    std::ifstream file(filename);
+    std::string line;
+
+    // Read the header
+    std::getline(file, line);
+    std::stringstream header(line);
+    std::string colName;
+    int numFeatures = 0;
+    std::getline(header, colName, ',');
+    // Count the number of numerical features
+    while (std::getline(header, colName, ',')) {
+        if (colName.compare(0, 6, "nonNum") == 0) {
+            break;
+        }
+        numFeatures += 1;
+    }
+
+    size_t lineNumber = 2;
+    // Only add the numerical features to the ClassMember vector
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        ClassMember obj;
+        std::string feature;
+        std::getline(ss, obj.name, ',');
+        for (int i = 0; i < numFeatures; ++i) {
+            std::getline(ss, feature, ',');
+            obj.features.push_back(std::stod(feature));
+        }
+        obj.lineNumber = lineNumber++;
+        dataset[obj.name].push_back(obj);
+    }
+    file.close();
+
+    return dataset;
+}
+
+std::vector<ClassMember> createTestSet(std::unordered_map<std::string, std::vector<ClassMember> > kSets[],
+    const std::vector<ClassMember>& injectedPoints, size_t fold) {
+    std::vector<ClassMember> testDataset;
+
+    // Add datapoints from the current fold to the test set
+    for (const auto& pair : kSets[fold]) {
+        testDataset.reserve(testDataset.size() + pair.second.size());
+        testDataset.insert(testDataset.end(), pair.second.begin(), pair.second.end());
+    }
+
+    // Add "randomly placed" points to the test set
+    testDataset.reserve(testDataset.size() + injectedPoints.size());
+    testDataset.insert(testDataset.end(), injectedPoints.begin(), injectedPoints.end());
+    TEST_RESULTS.randomPoints[0] += injectedPoints.size();
+
+    return testDataset;
+}
+
+void runFull(char* argv[]) {
+    std::string weightScheme = argv[1];
+    std::string pValueThreshold = argv[2];
+    bool applyFeatureWeighting = std::atoi(argv[3]);
+    int numNeighborsChecked = std::atoi(argv[4]);
+    int minSameClassCount = std::atoi(argv[5]);
+    std::string datasetFilename = argv[6];
+    std::string cacheDirectory = argv[7];
+
+    std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);
+    std::unordered_map<std::string, std::vector<ClassMember> > kSets[K_FOLDS];
+    kFoldSplit(dataset, kSets, 1000);
+
+    CACHE_PATHS.initPaths(cacheDirectory);
+    setThreads();
+
+    // Set what type of processing will occur
+    if (applyFeatureWeighting) {
+        MODEL_STATE.processType = "featureWeighting";
+    }
+    else {
+        MODEL_STATE.processType = "default";
+    }
+
+    MODEL_STATE.setDatasetSize();
+    MODEL_STATE.setWeightExp(weightScheme);
+    setPValueThreshold(pValueThreshold);
+
+    findFeatureBB(dataset);
+    std::vector<ClassMember> randomPoints;
+    insertRandomPoints(randomPoints, std::max(MODEL_STATE.datasetSize * 0.01, 2.0), 0);
+
+    for (int fold = 0; fold < K_FOLDS; ++fold) {
+        std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
+
+        for (int j = 0; j < K_FOLDS; ++j) {
+            if (j != fold) {
+                for (const auto& pair : kSets[j]) {
+                    std::vector<ClassMember>& classData = trainDataset[pair.first];
+                    classData.reserve(classData.size() + pair.second.size());
+                    classData.insert(classData.end(), pair.second.begin(), pair.second.end());
+                }
+            }
+        }
+        //std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, i);
+
+        std::cout << "Iteration " << fold << ":\n";
+
+        std::cout << "Original training dataset sizes:\n";
+        int totalDatasetPoints = 0;
+        for (const auto& pair : trainDataset) {
+            std::cout << "Class " << pair.first << ": " << pair.second.size() << " instances\n";
+            totalDatasetPoints += pair.second.size();
+        }
+        std::cout << "Total in dataset: " << totalDatasetPoints << "\n";
+
+        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset,
+            numNeighborsChecked, minSameClassCount, fold);
+
+        // Print out difference in dataset sizes between the original and filtered training dataset
+        std::cout << "\nFiltered training dataset sizes:\n";
+        int totalFilteredPoints = 0;
+        for (const auto& pair : MODEL_STATE.classMap) {
+            std::cout << "Class " << pair.first << ": " << pair.second.size() << " instances\n";
+            totalFilteredPoints += pair.second.size();
+        }
+        std::cout << "Total in filteredDataset: " << totalFilteredPoints << "\n\n";
+
+        fitClasses(sorted_distances, fold);
+        
+        std::vector<ClassMember> testDataset = createTestSet(kSets, randomPoints, fold);
+
+        test(testDataset, fold);
+
+        MODEL_STATE.clearTemporaries();
+    }
+}

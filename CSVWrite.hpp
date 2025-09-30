@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <algorithm>
+#include <iterator>
 
 template <typename T> void writeRow(const std::vector<T>& row, std::ofstream& out) {
 	std::copy(row.begin(), row.end() - 1, std::ostream_iterator<T>(out, ","));
