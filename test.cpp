@@ -255,6 +255,27 @@ std::vector<std::unordered_map<std::string, double> > calculatePValues(
 		start = stop;
 	}
 
+std::vector<std::unordered_map<std::string, double> > calculatePValues(
+	const std::vector<std::unordered_map<std::string, double> >& nnDistances) {
+	size_t start = 0, stop = 0;
+	size_t total = nnDistances.size();
+	size_t datapointsPerThread = std::round(total / NUM_THREADS);
+	std::vector<std::thread> threads;
+	std::vector<std::unordered_map<std::string, double> > pvalues(total);	
+
+	for (size_t i = 0; i < NUM_THREADS && stop != total; ++i) {
+		if (i == NUM_THREADS - 1) {
+			stop = total;
+		}
+		else {
+			stop = std::min(total, stop + datapointsPerThread);
+		}
+
+		threads.emplace_back(std::thread{ calculatePValuesInRange, std::cref(nnDistances), std::ref(pvalues), start, stop });
+
+		start = stop;
+	}
+
 	for (auto& t : threads) {
 		t.join();
 	}
@@ -1080,6 +1101,7 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 	if (!MODEL_STATE.preexistingBestfit) {
 		writeBestFitFunctionsToCSV(CACHE_PATHS.bestFitFunctionsByFoldFilepath, fold);
 	}
+	*/
 
 	printPValues(dataset, pvalues);
 	writePValuesToCSV(dataset, pvalues, fold);
@@ -1103,6 +1125,33 @@ void test(const std::vector<ClassMember>& dataset,
 	std::vector<std::pair<std::string, std::string> > classifications = calculateStatistics(dataset, pvalues);
 
 	writeBestFitFunctionsToCSV(CACHE_PATHS.bestFitFunctionsByFoldFilepath, fold);
+	writePValuesToCSV(dataset, pvalues, fold);
+	cacheTestPlotInfo(classifications, nnDistances, fold);
+
+	if (fold == K_FOLDS - 1) {
+		calculateSummary();
+		printSummary();
+	}
+}
+
+void test(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
+	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold) {
+	std::vector<std::pair<std::string, std::string> > classifications = calculateStatistics(dataset, pvalues);
+	
+	cacheTestPlotInfo(classifications, nnDistances, fold);
+	
+	if (fold == K_FOLDS - 1) {
+		calculateSummary();
+		printSummary();
+	}
+}
+
+void test(const std::vector<ClassMember>& dataset,
+	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold) {
+	std::vector<std::unordered_map<std::string, double> > pvalues = calculatePValues(nnDistances);
+	std::vector<std::pair<std::string, std::string> > classifications = calculateStatistics(dataset, pvalues);
+
+	writeBestFitFunctionsToCSV(fold);
 	writePValuesToCSV(dataset, pvalues, fold);
 	cacheTestPlotInfo(classifications, nnDistances, fold);
 

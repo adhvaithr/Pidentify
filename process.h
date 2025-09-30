@@ -20,4 +20,7 @@ std::unordered_map<std::string, std::vector<double> > computeNearestNeighborDist
 constexpr size_t MIN_PCA_BASIS = 2;
 constexpr double MIN_PCA_BASIS_VARIANCE = 0.5;
 
+constexpr size_t MIN_PCA_BASIS = 2;
+constexpr double MIN_PCA_BASIS_VARIANCE = 0.5;
+
 #endif
