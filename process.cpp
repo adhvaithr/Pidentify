@@ -382,7 +382,6 @@ std::unordered_map<std::string, std::vector<std::vector<double> > > weightedFilt
     return filteredDataset;
 }
 
-
 std::unordered_map<std::string, std::vector<double> > computeNearestNeighborDistances(
     const std::unordered_map<std::string, std::vector<std::vector<double> > >& classMap) {
     std::unordered_map<std::string, std::vector<double> > classNNDistMap;
@@ -469,10 +468,20 @@ void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMembe
         if (MODEL_STATE.featureWeights[className].size() != dim) {
             MODEL_STATE.featureWeights[className].resize(dim);
         }
-        // Assign a weight of 0 if withinMeanDistance = 0
+
         std::transform(MOCFD.cbegin(), MOCFD.cend(), MWCFD.cbegin(), MODEL_STATE.featureWeights[className].begin(),
-            [](double outsideMeanDistance, double withinMeanDistance)
-            {return (withinMeanDistance == 0) ? 0 : std::max((outsideMeanDistance / withinMeanDistance) - 1.0, 0.0); });
+            [&className](double outsideMeanDistance, double withinMeanDistance) {
+                if (withinMeanDistance == 0) {
+                    withinMeanDistance = 1.0 / MODEL_STATE.numInstancesPerClass.at(className);
+                    /*
+                    size_t totalDatasetSize = std::accumulate(MODEL_STATE.numInstancesPerClass.begin(), MODEL_STATE.numInstancesPerClass.end(), 0,
+                        [](size_t a, const std::pair<std::string, double>& b) {return a + b.second; });
+                    withinMeanDistance = 1.0 / totalDatasetSize;
+                    */
+                }
+                return std::max((outsideMeanDistance / withinMeanDistance) - 1.0, 0.0);
+            }
+        );
     }
 }
 
@@ -531,43 +540,62 @@ void weightFeatures(const std::unordered_map<std::string, std::vector<std::vecto
 template <
     class VectorOfVectorsType, typename num_t, int DIM = -1,
     class Distance = nanoflann::metric_L2>
-void computeNearestNeighborDistances(const std::vector<std::vector<double> >& datapoints,
+void computeNearestNeighborDistances(const std::vector<std::vector<double> >& dataset,
     const KDTreeVectorOfVectorsAdaptor<VectorOfVectorsType, num_t, DIM, Distance>& matIndex,
     std::vector<double>& NNDistances) {
     size_t k = 2;
+    size_t dim = dataset[0].size();
+    size_t total = dataset.size();
     std::vector<size_t> neighborIndices(k);
     std::vector<double> squaredDistances(k);
 
-    for (const std::vector<double>& datapoint : datapoints) {
-        matIndex.query(&datapoint[0], k, &neighborIndices[0], &squaredDistances[0]);
-        NNDistances.push_back(std::sqrt(squaredDistances[1]));
-        /*
-        if (squaredDistances[1] == 0.0) {
-            std::cout << "Squared distance is 0 for these points:\n";
-            std::copy(datapoint.begin(), datapoint.end(), std::ostream_iterator<double>(std::cout, ", "));
-            std::cout << std::endl;
-            std::copy(datapoints[neighborIndices[1]].begin(), datapoints[neighborIndices[1]].end(), std::ostream_iterator<double>(std::cout, ", "));
-            std::cout << std::endl;
+    for (size_t i = 0; i < total; ++i) {
+        matIndex.query(&dataset[i][0], k, &neighborIndices[0], &squaredDistances[0]);
+
+        size_t neighborIndex;
+        double nnDistance;
+        if (neighborIndices[0] == i) {
+            neighborIndex = neighborIndices[k - 1];
+            nnDistance = std::sqrt(squaredDistances[k - 1]);
         }
-        */
+        else {
+            neighborIndex = neighborIndices[0];
+            nnDistance = std::sqrt(squaredDistances[0]);
+        }
+
+        if (nnDistance == 0.0) {
+            size_t j = 0;
+            size_t similarFeatureCount = std::accumulate(dataset[i].begin(), dataset[i].end(), 0,
+                [&j, &dataset, neighborIndex](size_t currentSum, double featureValue) {
+                    return currentSum + (featureValue == dataset[neighborIndex][j++]);
+                }
+            );
+            
+            if (similarFeatureCount == dim) {
+                std::cout << "Duplicate datapoints in training set\n";
+                std::exit(0);
+            }
+        }
+        else {
+            NNDistances.push_back(nnDistance);
+        }
     }
 }
 
 // Compute weighted nearest neighbor distances for a class in the train dataset
-void computeClassWeightedNearestNeighborDistances(const std::vector<std::vector<double> >& datapoints,
-    const std::vector<std::vector<double> >& dataset, const std::string& className,
-    std::unordered_map<std::string, std::vector<double> >& classNNDistMap) {
-    size_t dim = datapoints[0].size();
+void computeClassWeightedNearestNeighborDistances(const std::vector<std::vector<double> >& dataset,
+    const std::string& className, std::unordered_map<std::string, std::vector<double> >& classNNDistMap) {
+    size_t dim = dataset[0].size();
 
     if (dim <= 3) {
         KDTreeVectorOfVectorsAdaptor<std::vector<std::vector<double> >, double, -1,
             metric_Weighted_L2_Simple> matIndex(dim, dataset, 10, 0, MODEL_STATE.featureWeights.at(className));
-        computeNearestNeighborDistances(datapoints, matIndex, classNNDistMap[className]);
+        computeNearestNeighborDistances(dataset, matIndex, classNNDistMap[className]);
     }
     else {
         KDTreeVectorOfVectorsAdaptor<std::vector<std::vector<double> >, double, -1,
             metric_Weighted_L2> matIndex(dim, dataset, 10, 0, MODEL_STATE.featureWeights.at(className));
-        computeNearestNeighborDistances(datapoints, matIndex, classNNDistMap[className]);
+        computeNearestNeighborDistances(dataset, matIndex, classNNDistMap[className]);
     }
 }
 
@@ -577,7 +605,7 @@ std::unordered_map<std::string, std::vector<double> > computeDatasetWeightedNear
     std::unordered_map<std::string, std::vector<double> > classNNDistMap;
 
     for (const auto& pair : classMap) {
-        computeClassWeightedNearestNeighborDistances(pair.second, pair.second, pair.first, classNNDistMap);
+        computeClassWeightedNearestNeighborDistances(pair.second, pair.first, classNNDistMap);
     }
 
     return classNNDistMap;
@@ -640,6 +668,9 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
        weightFeatures(dataset);
        filteredDataset = weightedFilterDatapoints(dataset, numNeighborsChecked, minSameClassCount);
    }
+   else {
+       filteredDataset = filterDatapoints(dataset, numNeighborsChecked, minSameClassCount);
+   }
 
    /*
    std::unordered_map<std::string, std::vector<std::vector<double> > > filteredDataset = filterDatapoints(dataset,
@@ -647,27 +678,11 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
     */
 
    /*
+   std::cout << "Feature weights:\n";
    for (const auto& pair : MODEL_STATE.featureWeights) {
        std::cout << pair.first << ": ";
        std::copy(pair.second.begin(), pair.second.end(), std::ostream_iterator<double>(std::cout, ", "));
        std::cout << std::endl;
-   }
-   */
-
-   /*
-   std::cout << "Filtered dataset:\n";
-   for (const auto& pair : filteredDataset) {
-       std::cout << pair.first << ":\n";
-       for (const std::vector<double>& datapoint : pair.second) {
-           std::copy(datapoint.begin(), datapoint.end(), std::ostream_iterator<double>(std::cout, ", "));
-           std::cout << std::endl;
-       }
-   }
-   */
-
-   /*
-   if (MODEL_STATE.processType == "featureWeighting") {
-       weightFeatures(filteredDataset);
    }
    */
 
