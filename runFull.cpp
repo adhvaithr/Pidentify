@@ -112,7 +112,6 @@ std::vector<ClassMember> createTestSet(std::unordered_map<std::string, std::vect
     // Add "randomly placed" points to the test set
     testDataset.reserve(testDataset.size() + injectedPoints.size());
     testDataset.insert(testDataset.end(), injectedPoints.begin(), injectedPoints.end());
-    TEST_RESULTS.randomPoints[0] += injectedPoints.size();
 
     return testDataset;
 }

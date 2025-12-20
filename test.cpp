@@ -14,6 +14,7 @@
 #include <cassert>
 #include <numeric>
 #include "ap.h"
+#include "nanoflann/KDTreeVectorOfVectorsAdaptor.h"
 
 #include "classMember.h"
 #include "process.h"
@@ -112,9 +113,11 @@ void setPValueThreshold(const std::string& threshold) {
 			1.0, [](double a, const std::pair<std::string, double>& b) { return a * (1.0 / b.second); });
 		TEST_RESULTS.pvalueThreshold = std::pow(total, 1.0 / MODEL_STATE.numInstancesPerClass.size());
 	}
+	/*
 	else if (threshold == "per class") {
 		TEST_RESULTS.perClassThresholds = createPerClassPValueThresholds();
 	}
+	*/
 	else {
 		TEST_RESULTS.pvalueThreshold = std::stod(threshold);
 	}
@@ -428,7 +431,6 @@ std::vector<std::pair<std::string, std::string> > calculateStatistics(const std:
 
 	return classifications;
 }
-*/
 
 // Previous version that work with one type of per class p value threshold
 /*
@@ -703,6 +705,7 @@ void calculateVoidNOTAPointsSummary(size_t idx) {
 		TEST_RESULTS.overallVoidPredStats[idx][i] /= MODEL_STATE.datasetSize;
 		TEST_RESULTS.overallVoidPredStats[idx][i] *= 100;
 	}
+	*/
 
 	// Calculate number of true negatives and recall for NOTA points
 	double* randomPoints = TEST_RESULTS.voidRandomPoints[idx];
@@ -1142,6 +1145,7 @@ void test(const std::vector<ClassMember>& dataset, const std::vector<std::unorde
 	
 	if (fold == K_FOLDS - 1) {
 		calculateSummary();
+		writeNOTACategoryResultsToCSV();
 		printSummary();
 	}
 }
