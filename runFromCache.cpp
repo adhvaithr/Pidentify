@@ -63,8 +63,8 @@ void readClassificationsDirectory(const std::string& classificationsDirectory,
                 nnDistances[fold][idx][foldClasses[i]] = std::stod(value);
             }
             if (obj.name == "NOTA") {
-                obj.NOTA = true;
-                ++TEST_RESULTS.randomPoints[0];
+                //obj.NOTA = true;
+                //++TEST_RESULTS.randomPoints[0];
             }
             else {
                 ++MODEL_STATE.numInstancesPerClass[obj.name];

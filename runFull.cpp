@@ -110,7 +110,6 @@ std::vector<ClassMember> createTestSet(std::unordered_map<std::string, std::vect
     // Add "randomly placed" points to the test set
     testDataset.reserve(testDataset.size() + injectedPoints.size());
     testDataset.insert(testDataset.end(), injectedPoints.begin(), injectedPoints.end());
-    TEST_RESULTS.randomPoints[0] += injectedPoints.size();
 
     return testDataset;
 }
@@ -143,9 +142,7 @@ void runFull(char* argv[]) {
     MODEL_STATE.setWeightExp(weightScheme);
     setPValueThreshold(pValueThreshold);
 
-    findFeatureBB(dataset);
-    std::vector<ClassMember> randomPoints;
-    insertRandomPoints(randomPoints, std::max(MODEL_STATE.datasetSize * 0.01, 2.0), 0);
+    std::vector<ClassMember> NOTAPoints = createNOTAPoints(dataset);
 
     for (int fold = 0; fold < K_FOLDS; ++fold) {
         std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
@@ -159,7 +156,7 @@ void runFull(char* argv[]) {
                 }
             }
         }
-        //std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, i);
+        //std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, fold);
 
         std::cout << "Iteration " << fold << ":\n";
 
@@ -185,7 +182,7 @@ void runFull(char* argv[]) {
 
         fitClasses(sorted_distances, fold);
         
-        std::vector<ClassMember> testDataset = createTestSet(kSets, randomPoints, fold);
+        std::vector<ClassMember> testDataset = createTestSet(kSets, NOTAPoints, fold);
 
         test(testDataset, fold);
 

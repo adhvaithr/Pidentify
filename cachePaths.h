@@ -9,6 +9,9 @@ struct CachePaths {
 	std::string pvaluesFilepath;
 	std::string ecdfDirectory;
 	std::string classificationsDirectory;
+	std::string NOTAPointsFilepath;
+	std::string NOTACategoryResultsFilepath;
+	std::string finishedFilepath;
 
 	void initPaths(const std::string& dir);
 };

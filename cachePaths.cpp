@@ -9,6 +9,9 @@ void CachePaths::initPaths(const std::string& dir) {
 	pvaluesFilepath = cacheDirectory + pathSep + "pvalues.csv";
 	ecdfDirectory = cacheDirectory + pathSep + "ecdf_info";
 	classificationsDirectory = cacheDirectory + pathSep + "classifications_info";
+	NOTAPointsFilepath = cacheDirectory + pathSep + "NOTAPoints.csv";
+	NOTACategoryResultsFilepath = cacheDirectory + pathSep + "resultsByNOTACategory.csv";
+	finishedFilepath = cacheDirectory + pathSep + "isFinished.txt";
 }
 
 std::string getPathSep() {
