@@ -485,58 +485,6 @@ void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMembe
     }
 }
 
-void weightFeatures(const std::unordered_map<std::string, std::vector<std::vector<double> > >& classMap) {
-    size_t dim = classMap.begin()->second[0].size();
-    size_t k = 1;
-
-    for (const auto& currentClass : classMap) {
-        // Construct matrix for all datapoints in different classes
-        std::vector<std::vector<double>> OCDataset;
-        for (const auto& classData : classMap) {
-            if (classData.first != currentClass.first) {
-                OCDataset.insert(OCDataset.end(), classData.second.begin(), classData.second.end());
-            }
-        }
-
-        std::vector<double> MWCFD(dim, 0.0); // Mean Within Class Feature Distances
-        std::vector<double> MOCFD(dim, 0.0); // Mean Outside Class Feature Distances
-
-        KDTreeVectorOfVectorsAdaptor<std::vector<std::vector<double> >, double> WCTree(dim, currentClass.second, 10, 0);
-        KDTreeVectorOfVectorsAdaptor<std::vector<std::vector<double> >, double> OCTree(dim, OCDataset, 10, 0);
-        std::vector<size_t> WCNeighborIndices(k + 1);
-        std::vector<double> WCSquaredDistances(k + 1);
-        std::vector<size_t> OCNeighborIndices(k);
-        std::vector<double> OCSquaredDistances(k);
-
-        size_t classSize = currentClass.second.size();
-        for (size_t i = 0; i < classSize; ++i) {
-            // Add difference between vectors for current datapoint and closest datapoint within the same class to MWCFD
-            WCTree.query(&currentClass.second[i][0], k + 1, &WCNeighborIndices[0], &WCSquaredDistances[0]);
-            size_t j = 0;
-            std::transform(currentClass.second[i].cbegin(), currentClass.second[i].cend(), currentClass.second[WCNeighborIndices[k]].cbegin(),
-                MWCFD.begin(), [&MWCFD, &j](double feature1, double feature2) {return MWCFD[j++] + std::abs(feature1 - feature2); });
-
-            // Add difference between vectors for current datapoint and closest datapoint outside the class to MOCFD
-            OCTree.query(&currentClass.second[i][0], k, &OCNeighborIndices[0], &OCSquaredDistances[0]);
-            j = 0;
-            std::transform(currentClass.second[i].cbegin(), currentClass.second[i].cend(), OCDataset[OCNeighborIndices[0]].cbegin(),
-                MOCFD.begin(), [&MOCFD, &j](double feature1, double feature2) {return MOCFD[j++] + std::abs(feature1 - feature2); });
-        }
-
-        // Calculate feature weights for the class
-        std::transform(MWCFD.begin(), MWCFD.end(), MWCFD.begin(), [classSize](double cumDistance) {return cumDistance / classSize; });
-        std::transform(MOCFD.begin(), MOCFD.end(), MOCFD.begin(), [classSize](double cumDistance) {return cumDistance / classSize; });
-
-        if (MODEL_STATE.featureWeights[currentClass.first].size() != dim) {
-            MODEL_STATE.featureWeights[currentClass.first].resize(dim);
-        }
-        // Assign a weight of 0 if withinMeanDistance = 0
-        std::transform(MOCFD.cbegin(), MOCFD.cend(), MWCFD.cbegin(), MODEL_STATE.featureWeights[currentClass.first].begin(),
-            [](double outsideMeanDistance, double withinMeanDistance)
-            {return (withinMeanDistance == 0) ? 0 : std::max((outsideMeanDistance / withinMeanDistance) - 1.0, 0.0); });
-    }
-}
-
 template <
     class VectorOfVectorsType, typename num_t, int DIM = -1,
     class Distance = nanoflann::metric_L2>
@@ -673,11 +621,6 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
    }
 
    /*
-   std::unordered_map<std::string, std::vector<std::vector<double> > > filteredDataset = filterDatapoints(dataset,
-        numNeighborsChecked, minSameClassCount);
-    */
-
-   /*
    std::cout << "Feature weights:\n";
    for (const auto& pair : MODEL_STATE.featureWeights) {
        std::cout << pair.first << ": ";
@@ -716,27 +659,6 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
    MODEL_STATE.classMap = std::move(filteredDataset);
 
    std::vector<std::string> warningClasses;
-
-   /*
-   // sort distances in ascending order
-   for (auto& pair : classNNDistMap) {
-       std::sort(pair.second.begin(), pair.second.end());
-
-       // eliminate duplicated results
-       pair.second.erase(unique(pair.second.begin(), pair.second.end()), pair.second.end());
-
-       if (pair.second.size() < MIN_CLASS_MEMBERS) {
-           std::cout << "Warning: Class \"" << pair.first << "\" has an insufficient amount "
-               "of unique points for its ECDF\n";
-           MODEL_STATE.classMap.erase(pair.first);
-           continue;
-       }
-
-       if (pair.second[0] > 1.0) {
-           warningClasses.push_back(pair.first);
-       }
-   }
-   */
 
    // sort distances in ascending order
    for (auto iter = classNNDistMap.begin(); iter != classNNDistMap.end();) {
