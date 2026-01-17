@@ -14,7 +14,6 @@
 #include <cassert>
 #include <numeric>
 #include "ap.h"
-#include "nanoflann/KDTreeVectorOfVectorsAdaptor.h"
 
 #include "classMember.h"
 #include "process.h"
@@ -1155,7 +1154,7 @@ void test(const std::vector<ClassMember>& dataset,
 	std::vector<std::unordered_map<std::string, double> > pvalues = calculatePValues(nnDistances);
 	std::vector<std::pair<std::string, std::string> > classifications = calculateStatistics(dataset, pvalues);
 
-	writeBestFitFunctionsToCSV(fold);
+	writeBestFitFunctionsToCSV(CACHE_PATHS.bestFitFunctionsByFoldFilepath, fold);
 	writePValuesToCSV(dataset, pvalues, fold);
 	cacheTestPlotInfo(classifications, nnDistances, fold);
 
