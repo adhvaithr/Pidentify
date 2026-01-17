@@ -24,8 +24,7 @@ int main(int argc, char* argv[]) {
         case 5:
             runFromNNDistances(argv);
             break;
-        case 8:
-            runFull(argv);
-            break;
+        default:
+            runFull(argc, argv);
     } 
 }

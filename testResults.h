@@ -3,6 +3,7 @@
 
 #include <unordered_map>
 #include "test.h"
+#include "NOTAPoints.h"
 
 struct TestResults {
 	std::unordered_map<NOTACategory, double[3]> overallHyperspacePredStats;

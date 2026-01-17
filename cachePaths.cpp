@@ -1,4 +1,5 @@
 #include <sys/stat.h>
+#include <fstream>
 
 #include "cachePaths.h"
 
@@ -6,6 +7,7 @@ void CachePaths::initPaths(const std::string& dir) {
 	std::string pathSep = getPathSep();
 	cacheDirectory = (dir == "" || dir == "." || dir == "." + pathSep) ? "." : dir;
 	bestFitFunctionsFilepath = cacheDirectory + pathSep + "bestFitFunctions.csv";
+	bestFitFunctionsByFoldFilepath = cacheDirectory + pathSep + "bestFitFunctionsByFold.csv";
 	pvaluesFilepath = cacheDirectory + pathSep + "pvalues.csv";
 	ecdfDirectory = cacheDirectory + pathSep + "ecdf_info";
 	classificationsDirectory = cacheDirectory + pathSep + "classifications_info";
@@ -31,4 +33,9 @@ void createFolder(const char* dir) {
 			mkdir(dir, 0777);
 		#endif
 	}
+}
+
+bool fileExists(const std::string& filename) {
+	std::ifstream file(filename);
+	return file.good();
 }

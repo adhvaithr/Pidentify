@@ -16,6 +16,7 @@ struct ModelState {
 	std::vector<size_t> zeroStdDeviation;
 	alglib::real_2d_array principalAxes;
 	std::unordered_map<std::string, std::vector<std::vector<double> > > classMap;
+	bool preexistingBestfit;
 	std::unordered_map<std::string, FitResult> bestFit;
 	size_t trainDatasetSize;
 	size_t datasetSize;

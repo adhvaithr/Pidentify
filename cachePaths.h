@@ -6,6 +6,7 @@
 struct CachePaths {
 	std::string cacheDirectory;
 	std::string bestFitFunctionsFilepath;
+	std::string bestFitFunctionsByFoldFilepath;
 	std::string pvaluesFilepath;
 	std::string ecdfDirectory;
 	std::string classificationsDirectory;
@@ -18,6 +19,7 @@ struct CachePaths {
 
 std::string getPathSep();
 void createFolder(const char*);
+bool fileExists(const std::string& fileName);
 
 extern CachePaths CACHE_PATHS;
 

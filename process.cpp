@@ -620,6 +620,9 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
        filteredDataset = filterDatapoints(dataset, numNeighborsChecked, minSameClassCount);
    }
 
+   // Save all datapoints for each class
+   MODEL_STATE.classMap = std::move(filteredDataset);
+
    /*
    std::cout << "Feature weights:\n";
    for (const auto& pair : MODEL_STATE.featureWeights) {
@@ -646,17 +649,20 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
    // Ending of saving filtered datapoints
    */
    
-   // compute k nearest distance, k = 1
    std::unordered_map<std::string, std::vector<double> > classNNDistMap;
+
+   // Skip computing nearest neighbor distances if they aren't needed for sigmoid fitting
+   if (MODEL_STATE.preexistingBestfit) {
+       return classNNDistMap;
+   }
+
+   // compute k nearest distance, k = 1
    if (MODEL_STATE.processType == "featureWeighting") {
-       classNNDistMap = computeDatasetWeightedNearestNeighborDistances(filteredDataset);
+       classNNDistMap = computeDatasetWeightedNearestNeighborDistances(MODEL_STATE.classMap);
    }
    else {
-       classNNDistMap = computeNearestNeighborDistances(filteredDataset);
+       classNNDistMap = computeNearestNeighborDistances(MODEL_STATE.classMap);
    }
-   
-   // Save all datapoints for each class
-   MODEL_STATE.classMap = std::move(filteredDataset);
 
    std::vector<std::string> warningClasses;
 

@@ -31,7 +31,9 @@ void ModelState::setWeightExp(const std::string& weightScheme) {
 void ModelState::clearTemporaries() {
 	zeroStdDeviation.clear();
 	classMap.clear();
-	bestFit.clear();
+	if (!preexistingBestfit) {
+		bestFit.clear();
+	}
 }
 
 // Initialize number of threads to use concurrently
