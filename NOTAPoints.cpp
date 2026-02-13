@@ -349,8 +349,8 @@ std::vector<ClassMember> insertRandomPoints(const std::unordered_map<std::string
 	}
 	fclose(fp);
 
-	fp = fopen(CACHE_PATHS.finishedFilepath.c_str(), "w");
-	fclose(fp);
+	//fp = fopen(CACHE_PATHS.finishedFilepath.c_str(), "w");
+	//fclose(fp);
 	// Ending of saving NOTA points
 
 	return NOTAPoints;
