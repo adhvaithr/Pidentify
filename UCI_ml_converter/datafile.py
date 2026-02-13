@@ -22,21 +22,26 @@ class DataFile:
     class_drop_chars: bool
     custom_class: list[str]
     merge_class: list[int]
+    combine_rows: bool = False
     infer_non_num: bool = False
     delimiter: str = None
 
 
-    def process_file(self, *files, merge: bool = False) -> pd.DataFrame:
+    def process_file(self, *files, merge: bool = False, merge_on: list[str] = []) -> pd.DataFrame:
         """
         Load a single file and return a dataframe with non-numerical values removed from numerical columns
         and the columns reordered.
         """
         df = self._read_file()
-        if merge:
-            df = DataFile._merge_files(df, *files)
         if self.drop_cols:
             self._remove_cols(df)
+        if self.combine_rows:
+            df = self._combine_rows(df)
+        if merge and not merge_on:
+            df = DataFile._append_cols(df, *files)
         df = self._process_header(df)
+        if merge_on:
+            df = self._merge_files_on(merge_on, df, *files)
         # Numerical columns with the class column excluded, since it can be numerical or non-numerical
         num_cols = sorted(list(set(range(len(df.columns))) - set(self.ignore_cols) - \
                           set([self.class_col_index] if self.class_col_index != -1 else [])))
@@ -76,9 +81,9 @@ class DataFile:
 
 
     @staticmethod
-    def _merge_files(df: pd.DataFrame, *files) -> pd.DataFrame:
+    def _append_cols(df: pd.DataFrame, *files) -> pd.DataFrame:
         """
-        Concatenate columns gathered from files to the end of a dataframe, and return the
+        Concatenate single columns gathered from files to the end of a dataframe, and return the
         resulting dataframe.
         """
         merge_dfs = []
@@ -87,6 +92,41 @@ class DataFile:
                 res = [line.strip() for line in file.readlines()]    
             merge_dfs.append(pd.DataFrame(res, columns=[len(df.columns)]))
         return pd.concat([df, *merge_dfs], axis=1)
+
+
+    def _merge_files_on(self, merge_on: list[str], df: pd.DataFrame, *files) -> pd.DataFrame:
+        """
+        Inner join dataframes on shared column name(s), including handling for columns already present
+        in the original dataset that should have 'nonNum' prepended to them and properly naming non-numerical
+        columns added by the inner join.
+        """
+        merge_dfs = []
+        for file in files:  
+            merge_dfs.append(pd.read_table(file.file_path, sep=None, engine='python'))
+
+        left_columns = []
+        columns = set(df.columns)
+        for merge_col in merge_on:
+            if merge_col not in columns:
+                left_columns.append("nonNum" + merge_col)
+            else:
+                left_columns.append(merge_col)
+
+        for merge_df_num, merge_df in enumerate(merge_dfs):
+            if merge_df_num == 0:
+                df = df.astype(dtype=dict(zip(left_columns, [merge_df[col_name].dtype for col_name in merge_on])))
+                df = df.merge(merge_df, how='inner', left_on=left_columns, right_on=merge_on)
+            else:
+                df = df.astype(dtype=dict(zip(merge_on, [merge_df[col_name].dtype for col_name in merge_on])))
+                df = df.merge(merge_df, how='inner', on=merge_on)
+
+        df.drop(columns=[col[6:] for col in left_columns if col.startswith("nonNum")], inplace=True)
+        df.rename(columns=dict(zip(df.columns,
+                                   left_columns + ["nonNum" + col_name if i + len(left_columns) in self.ignore_cols else col_name
+                                                   for i, col_name in enumerate(df.columns[len(left_columns):])])),
+                  inplace=True)
+        
+        return df
     
 
     def _remove_cols(self, df: pd.DataFrame) -> None:
@@ -101,8 +141,39 @@ class DataFile:
             self.merge_class[i] = DataFile._reindex_col(merge_col, self.drop_cols)
         for i, ignore_col in enumerate(self.ignore_cols):
             self.ignore_cols[i] = DataFile._reindex_col(ignore_col, self.drop_cols)
+    
 
+    def _combine_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Combine all rows of file into one row and update columns to ignore to reflect this.
+        """
+        row_length = df.shape[1]
+        has_header = DataFile._has_header(df)
 
+        if self.ignore_cols:
+            temp_ignore_cols = self.ignore_cols[:]
+            for _ in range(len(df) - 2 if has_header else len(df) - 1):
+                for i in range(len(temp_ignore_cols)):
+                    temp_ignore_cols[i] += row_length
+                    self.ignore_cols.append(temp_ignore_cols[i])
+
+        return pd.DataFrame([entry for row in df.itertuples(index=False) for entry in row][row_length if has_header else 0:]).T
+            
+
+    @staticmethod
+    def _has_header(df: pd.DataFrame) -> bool:
+        """
+        Return True if the dataframe has a header with a name for every column and False otherwise.
+        """
+        for entry in df.iloc[0]:
+            try:
+                float(entry)
+                return False
+            except ValueError:
+                pass
+        return True
+
+        
     def _process_header(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Add a header if one is needed, or drop the header if it is present and not needed.
@@ -117,16 +188,10 @@ class DataFile:
                 if df.dtypes.iloc[i] == "object":
                     self.ignore_cols.append(i)
         
-        has_header = False
-        non_num_vals = 0
-        for i, entry in enumerate(df.iloc[0]):
-            try:
-                float(entry)
-            except ValueError:
-                non_num_vals += 1
-        if non_num_vals == len(df.iloc[0]):
-            has_header = True
+        has_header = DataFile._has_header(df)
         if has_header and not self.include_header:
+            if self.merge_class:
+                self.custom_class = [df.iloc[0, i] for i in self.merge_class]
             df.drop(0, inplace=True)
         elif has_header and self.include_header:
             modified_header = []
@@ -169,6 +234,8 @@ class DataFile:
             elif col in self.ignore_cols:
                 header.append(f"nonNumCol{non_num_cols_idx}")
                 non_num_cols_idx += 1
+            elif col in self.merge_class:
+                header.append("")
             else:
                 header.append(f"col{num_cols_idx}")
                 num_cols_idx += 1
@@ -238,17 +305,18 @@ class DataFile:
 
     def _merge_class_columns(self, num_cols: list[int], df: pd.DataFrame) -> tuple[pd.DataFrame, list[int]]:
         """
-        Merge multiple class columns together into one class column.  It is currently assumed that the correct
-        name of the class can be found in the name of the merged columns and that headers are being included.
+        Merge multiple class columns together into one class column.  The class names are either specified by
+        the user or come from the column label, and the class is assumed to be the only column with a 1.
         The ignored columns and numerical columns are reindexed to reflect the columns dropped during the merge.
         """
         def combine_columns(*col_entries):
             col_entries = list(map(int, col_entries))
-            return merge_cols[col_entries.index(1)]
-        merge_cols = [df.columns[i] for i in self.merge_class]
-        class_col = pd.DataFrame(list(map(combine_columns, *[df[col_name] for col_name in merge_cols])),
-                                 index=df.index, columns=["className"])
-        df.drop(columns=merge_cols, inplace=True)
+            return class_labels[col_entries.index(1)]
+        actual_labels = [df.columns[i] for i in self.merge_class]
+        class_labels = self.custom_class if self.custom_class else actual_labels
+        class_col = pd.DataFrame(list(map(combine_columns, *[df.iloc[:, i] for i in self.merge_class])),
+                                 index=df.index, columns=["className"] if self.include_header else range(1))
+        df.drop(columns=actual_labels, inplace=True)
         for i, ignore_col in enumerate(self.ignore_cols):
             self.ignore_cols[i] = DataFile._reindex_col(ignore_col, self.merge_class)
         num_cols = list(set(num_cols) - set(self.merge_class))

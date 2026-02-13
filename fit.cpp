@@ -5,9 +5,13 @@
 #include <future>
 #include <thread>
 #include "interpolation.h"
+
 #include "fit.h"
 #include "modelState.h"
-#include <iterator>
+#include "cachePaths.h"
+
+#include "CSVWrite.hpp"
+#include <cassert>
 
 using namespace alglib;
 
@@ -36,7 +40,7 @@ void logistic_fd(const real_1d_array &c, const real_1d_array &x, double &func, r
 // hyperbolic tangent function
 double hyperbolic_tangent(double k, double alpha, double x)
 {
-    return ((exp(k * (x - alpha)) - exp(-k * (x - alpha))) / (exp(k * (x - alpha)) + exp(-k * (x - alpha))) + 1) / 2;
+    return (std::tanh(k * (x - alpha)) + 1) / 2;
 }
 
 void hyperbolic_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
@@ -46,9 +50,13 @@ void hyperbolic_f(const real_1d_array &c, const real_1d_array &x, double &func, 
 
 void hyperbolic_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
 {
+    double k = c[0];
+    double alpha = c[1];
+    double z = k * (x[0] - alpha);
     func = 1 - hyperbolic_tangent(c[0], c[1], x[0]);
-    grad[0] = - (2 * (x[0] - c[1]) * exp(2 * c[0] * (x[0] - c[1]))) / ((exp(2 * c[0] * (x[0] - c[1])) + 1) * (exp(2 * c[0] * (x[0] - c[1])) + 1));
-    grad[1] = (2 * c[0] * exp(2 * c[0] * (x[0] - c[1]))) / ((exp(2 * c[0] * (x[0] - c[1])) + 1) * (exp(2 * c[0] * (x[0] - c[1])) + 1));
+    double commonDeriv = -0.5 * (1 - std::tanh(z) * std::tanh(z));
+    grad[0] = commonDeriv * (x[0] - alpha); 
+    grad[1] = commonDeriv * (-k);
 }
 
 // arctangent function
@@ -106,7 +114,47 @@ void algebraic_fd(const real_1d_array &c, const real_1d_array &x, double &func, 
     grad[1] = - (c[0] / (2 * (sqrt((c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1) * (c[0] * c[0] * (x[0] - c[1]) * (x[0] - c[1]) + 1)))));
 }
 
+// -------------------------------------------------------------------------
+// GOMPERTZ FUNCTION
+// f(x) = exp( -alpha * exp( -k*x ) )
+// We'll define f(x)=1 - Gompertz(...) to keep it consistent with the others.
+// -------------------------------------------------------------------------
+double gompertz(double k, double alpha, double x)
+{
+    return std::exp(-alpha * std::exp(-k * x));
+}
 
+void gompertz_f(const real_1d_array &c, const real_1d_array &x, double &func, void *ptr)
+{
+    double k     = c[0];
+    double alpha = c[1];
+    double val   = gompertz(k, alpha, x[0]); 
+    func = 1.0 - val;
+}
+
+void gompertz_fd(const real_1d_array &c, const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
+{
+    double k     = c[0];
+    double alpha = c[1];
+    double xx    = x[0];
+    double val   = gompertz(k, alpha, xx);
+
+    // func = 1 - val
+    func = 1.0 - val;
+    
+    // d/dk of [1 - val] = - d/dk [val]
+    // val = exp(-k * exp(-alpha*x))
+    // d[val]/d[k] = val * [ - exp(-alpha*x) ]
+    // => d/dk(1 - val) = + exp(-alpha*x) * val
+    grad[0] = -alpha * xx * std::exp(-k * xx) * val;
+
+    // d/dalpha of [1 - val] = - d/dalpha [val]
+    // d[val]/d[alpha] = val * [ -k * d/d[alpha]( exp(-alpha*x) ) ] = val * [ -k * ( -x * exp(-alpha*x) ) ] = + k*x * exp(-alpha*x) * val
+    // => d/dalpha(1 - val) = - [ + k*x * exp(-alpha*x) * val ] = -k * x * exp(-alpha*x) * val
+    grad[1] = std::exp(-k * xx) * val;
+}
+
+// error function based sigmoid
 double erf_sigmoid(double k, double alpha, double x) {
     // Compute z = k * (x - alpha)
     double z = k * (x - alpha);
@@ -138,14 +186,31 @@ void erf_sigmoid_fd(const real_1d_array &c, const real_1d_array &x,
     
     // Using chain rule:
     // dz/dk = (x - alpha) and dz/dalpha = -k
-    grad.setlength(2);
     grad[0] = common_deriv * (x[0] - alpha);  // Partial derivative w.r.t. k
     grad[1] = common_deriv * (-k);            // Partial derivative w.r.t. alpha
 }
 
+void fitFunction(alglib::real_2d_array& x, alglib::real_1d_array& y, alglib::real_1d_array& w,
+    void (*inverse_f)(const alglib::real_1d_array&, const alglib::real_1d_array&, double&, void*),
+    void (*gradient_f)(const alglib::real_1d_array&, const alglib::real_1d_array&, double&, alglib::real_1d_array&, void*),
+    const std::string& functionName, std::vector<FitResult>& results,
+    const alglib::real_1d_array& lowerParamBounds = "[1e-30, -1e30]",
+    const alglib::real_1d_array& upperParamBounds = "[1e30, 1e30]") {
+    real_1d_array c = "[0.367, 0.45]"; // initial values for c & a in c(x-a)
+    double epsx = 0;
+    ae_int_t maxits = 0;
+    lsfitstate state;
+    lsfitreport rep;
 
+    lsfitcreatewfg(x, y, w, c, state);
+    lsfitsetbc(state, lowerParamBounds, upperParamBounds);
+    lsfitsetcond(state, epsx, maxits);
+    alglib::lsfitfit(state, inverse_f, gradient_f);
+    lsfitresults(state, c, rep);
+    results.push_back({ c, functionName, rep.wrmserror }); 
+}
 
-void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_values, std::string className)
+void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_values, double weightExp, std::string className)
 {
     alglib::real_2d_array x;
     alglib::real_1d_array y;
@@ -156,32 +221,22 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     y.setlength(y_values.size());
 
     // Copying data from vector to ALGLIB array
-    for(size_t i = 0; i < sorted_distances.size(); i++) {
+    for (size_t i = 0; i < sorted_distances.size(); i++) {
         x[i][0] = sorted_distances[i];  // Assuming each subvector has exactly one element
     }
 
-    for(size_t i = 0; i < y_values.size(); i++) {
+    for (size_t i = 0; i < y_values.size(); i++) {
         y[i] = y_values[i];
     }
 
     // set weights for fitting
     w.setlength(y_values.size());
-    for(size_t i = 0; i < y_values.size(); i++) {
-        w[i] = sorted_distances[i]*sorted_distances[i];
+    for (size_t i = 0; i < y_values.size(); i++) {
+        w[i] = std::pow(sorted_distances[i], weightExp);
     }
 
-    real_1d_array c = "[0.367, 0.45]"; // initial values for c & a in c(x-a)
-    double epsx = 0;
-    ae_int_t maxits = 0;
-    lsfitstate state;
-    lsfitreport rep;
-
     // nonlinear square curve fitting for logistic function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, logistic_f, logistic_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "Logistic function", rep.wrmserror});
+    fitFunction(x, y, w, &logistic_f, &logistic_fd, "Logistic function", results);
     //printf("%d\n", int(rep.terminationtype));  // status code
 
     // print out the fitting procedure
@@ -190,63 +245,44 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     }*/
 
     // nonlinear square curve fitting for hyperbolic tangent function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, hyperbolic_f, hyperbolic_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "hyperbolic tangent function", rep.wrmserror});
+    fitFunction(x, y, w, &hyperbolic_f, &hyperbolic_fd, "hyperbolic tangent function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
     /*for (int i = 0; i < y.length(); i++) {
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - hyperbolic_tangent(c[0], c[1], x[i][0]));
-    }*/
-    
+    */
+
     // nonlinear square curve fitting for arctangent function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, arctangent_f, arctangent_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "arctangent function", rep.wrmserror});
+    fitFunction(x, y, w, &arctangent_f, &arctangent_fd, "arctangent function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
     /*for (int i = 0; i < y.size(); i++){
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - arctangent(c[0], c[1], x[i][0]));
     }*/
-    
+
     // nonlinear square curve fitting for Gudermannian function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, gudermannian_f, gudermannian_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "gudermannian function", rep.wrmserror});
+    fitFunction(x, y, w, &gudermannian_f, &gudermannian_fd, "gudermannian function", results);
     //printf("%d\n", int(rep.terminationtype));
 
     // print out the fitting procedure
     /*for (int i = 0; i < y.size(); i++){
         printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - gudermannian(c[0], c[1], x[i][0]));
     }*/
-    
+
     // nonlinear square curve fitting for simple algebraic function
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    alglib::lsfitfit(state, algebraic_f, algebraic_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "simple algebraic function", rep.wrmserror});
+    fitFunction(x, y, w, &algebraic_f, &algebraic_fd, "simple algebraic function", results);
     //printf("%d\n", int(rep.terminationtype));
 
-    // print out the fitting procedure
-    /*for (int i = 0; i < y.size(); i++){
-        printf("xi: %g yi: %g f(%g,%g,xi): %g\n", x[i][0], y[i], c[0], c[1], 1 - algebraic(c[0], c[1], x[i][0]));
-    }*/
+    // ----------------------------------------------------------------------
+    // nonlinear square curve fitting for Gompertz function
+    // ----------------------------------------------------------------------
+    fitFunction(x, y, w, &gompertz_f, &gompertz_fd, "Gompertz function", results, "[1e-30, 1e-30]");
+    //fitFunction(x, y, w, &gompertz_f, &gompertz_fd, "Gompertz function", results, "[30, -200]", "[1e30, 1e30]", 1e-9, 1000);
 
     // Nonlinear squares curve fitting for error function based sigmoid
-    lsfitcreatewfg(x, y, w, c, state);
-    lsfitsetcond(state, epsx, maxits);
-    lsfitfit(state, erf_sigmoid_f, erf_sigmoid_fd);
-    lsfitresults(state, c, rep);
-    results.push_back({c, "error function based sigmoid", rep.wrmserror});
+    fitFunction(x, y, w, &erf_sigmoid_f, &erf_sigmoid_fd, "error function based sigmoid", results, "[-INF, -INF]", "[+INF, +INF]");
 
 
     m.lock();
@@ -275,28 +311,77 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     m.unlock();
 }
 
-int fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_distances) {
+void fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_distances, size_t iteration) {
     std::unordered_map<std::string, std::thread> threads;
     std::unordered_map<std::string, std::future<void> > results;
+
+    bool firstClass = true;
+    std::string filepath = CACHE_PATHS.ecdfDirectory + getPathSep() + "iter" + std::to_string(iteration) + ".csv";
+    FILE* fp;
 
     for (auto& pair : sorted_distances) {
         size_t l = pair.second.size();
 
         // construct corresponding y values in terms of distances for ECDF points
-        std::vector<double> y(l + 2);
+        std::vector<double> y(l);
         for (size_t i = 0; i < l; ++i) {
-            y[i + 1] = 1 - static_cast<double>(i + 1) / (l + 1);
+            y[i] = 1 - static_cast<double>(i + 1) / (l + 1);
         }
-
+        
+        // Beginning of saving ECDF points
+        if (iteration == 0) {
+            createFolder(CACHE_PATHS.ecdfDirectory.c_str());
+        }
+        if (firstClass) {
+            fp = fopen(filepath.c_str(), "w");
+            fprintf(fp, "className,x,y\n");
+            firstClass = false;
+        }
+        else {
+            fp = fopen(filepath.c_str(), "a");
+        }
+        for (size_t i = 0; i < l; ++i) {
+            fprintf(fp, "%s,%g,%g\n", pair.first.c_str(), pair.second[i], y[i]);
+        }
+        fclose(fp);
+        // Ending of saving ECDF points
+        
+        /*
         // Insert (0,0) and faraway point into ECDF points
         pair.second.insert(pair.second.begin(), 0);
         y[0] = 1;
         pair.second.insert(pair.second.end(), 1);
         y[l + 1] = 0;
+        */
         
-        std::packaged_task<void(std::vector<double>, std::vector<double>, std::string)> parallelCurveFitting{ curveFitting };
+        std::packaged_task<void(std::vector<double>, std::vector<double>, double, std::string)> parallelCurveFitting{ curveFitting };
         results[pair.first] = parallelCurveFitting.get_future();
-        threads[pair.first] = std::thread{ std::move(parallelCurveFitting), pair.second, y, pair.first };
+        threads[pair.first] = std::thread{ std::move(parallelCurveFitting), pair.second, y, MODEL_STATE.weightExp, pair.first };
+    }
+    
+    for (auto& pair : threads) {
+        try {
+            pair.second.join();
+            results[pair.first].get();
+        }
+        catch (alglib::ap_error alglib_exception) {
+            std::cout << "While curve fitting for class \"" << pair.first << "\", the following exception occurred:\n";
+            printf("ALGLIB exception with message '%s'\n", alglib_exception.msg.c_str());
+            std::exit(0);
+        }
+    }
+}
+
+void fitClasses(const std::unordered_map<std::string, std::vector<double> >& sorted_distances,
+    const std::unordered_map<std::string, std::vector<double> >& y_values) {
+    std::unordered_map<std::string, std::thread> threads;
+    std::unordered_map<std::string, std::future<void> > results;
+
+    for (const auto& pair : sorted_distances) {
+        std::packaged_task<void(std::vector<double>, std::vector<double>, double, std::string)> parallelCurveFitting{ curveFitting };
+        results[pair.first] = parallelCurveFitting.get_future();
+        threads[pair.first] = std::thread{ std::move(parallelCurveFitting), pair.second,
+            y_values.at(pair.first), MODEL_STATE.weightExp, pair.first};
     }
 
     for (auto& pair : threads) {
@@ -307,9 +392,7 @@ int fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_dis
         catch (alglib::ap_error alglib_exception) {
             std::cout << "While curve fitting for class \"" << pair.first << "\", the following exception occurred:\n";
             printf("ALGLIB exception with message '%s'\n", alglib_exception.msg.c_str());
-            return 1;
+            std::exit(0);
         }
     }
-    
-    return 0;
 }

@@ -1,141 +1,82 @@
 #include <iostream>
-#include <vector>
-#include <unordered_map>
-#include <array>
-#include <string>
-#include <cstring>
-#include <sstream>
-#include <fstream>
-#include <thread>
 #include <mutex>
-#include <algorithm>
-#include <iterator>
+#include <string>
 
-#include "fit.h"
-#include "process.h"
-#include "classMember.h"
-#include "test.h"
 #include "modelState.h"
-
-using namespace std;
+#include "testResults.h"
+#include "cachePaths.h"
+#include "runFull.h"
+#include "runFromCache.h"
 
 ModelState MODEL_STATE;
+TestResults TEST_RESULTS;
+CachePaths CACHE_PATHS;
 std::mutex m;
 double NUM_THREADS;
 int K_FOLDS = 10;
+size_t MIN_CLASS_MEMBERS = 30;
+size_t MAX_CLASS_MEMBERS = 1000;
 
-/*Read dataset from custom formatted file where columns are in the following order:
-class name, numerical features, nonnumerical features (if any).*/
-std::vector<ClassMember> readFormattedDataset(const std::string& filename) {
-    std::vector<ClassMember> dataset;
-    std::ifstream file(filename);
-    std::string line;
+void printBasicHelp() {
+    std::string helpMsg = "Usage: ./cpv [-H] weightScheme pvalueThreshold featureWeighting neighborsChecked minSameClass "
+        "datasetFilepath cacheDirectory\n"
+        "\t -H: display more detailed help message\n"
+        "\t weightScheme: {\"squared\", \"linear\", \"unweighted\", \"cube root\"}\n"
+        "\t pvalueThreshold: {\"per class\"}\n"
+        "\t featureWeighting: {0, 1}\n"
+        "\t neighborsChecked: non negative integer\n"
+        "\t minSameClass: non negative integer\n"
+        "\t datasetFilepath: file containing dataset to run k fold cross validation on\n"
+        "\t cacheDirectory: folder where output logs from training and testing will be stored\n";
 
-    // Read the header
-    std::getline(file, line);
-    std::stringstream header(line);
-    std::string colName;
-    int numFeatures = 0;
-    std::getline(header, colName, ',');
-    // Count the number of numerical features
-    while (std::getline(header, colName, ',')) {
-        if (colName.compare(0, 6, "nonNum") == 0) {
-            break;
-        }
-        numFeatures += 1;
-    }
-
-    // Only add the numerical features to the ClassMember vector
-    while (std::getline(file, line)) {
-        std::stringstream ss(line);
-        ClassMember obj;
-        std::string feature;
-        std::getline(ss, obj.name, ',');
-        for (int i = 0; i < numFeatures; ++i) {
-            std::getline(ss, feature, ',');
-            obj.features.push_back(std::stod(feature));
-        }
-
-        dataset.push_back(obj);
-    }
-    file.close();
-
-    return dataset;
+    std::cout << helpMsg;
 }
 
-// Initialize number of threads to use concurrently
-void setThreads() {
-    NUM_THREADS = std::max(static_cast<int>(std::thread::hardware_concurrency()), 4);
-}
+void printDetailedHelp() {
+    std::string helpMsg = "Usage: ./cpv [-H] weightScheme pvalueThreshold featureWeighting neighborsChecked minSameClass "
+        "datasetFilepath cacheDirectory\n"
+        "\t -H: Display more detailed help message.\n"
+        "\t weightScheme {\"squared\", \"linear\", \"unweighted\", \"cube root\"}: Weight assigned to points in the "
+        "empirical distribution curve (ECDF) during curve fitting, as a function of nearest neighbor distance. "
+        "Recommended to choose \"squared.\"\n"
+        "\t pvalueThreshold {\"per class\"}\n"
+        "\t featureWeighting {0, 1}: Boolean value for whether to apply feature weighting during nearest neighbor "
+        "distance calculations.\n"
+        "\t neighborsChecked {non negative integer}: Number of global nearest neighbors to find for \"voting off the "
+        "island.\" 5 is generally a good choice.\n"
+        "\t minSameClass {non negative integer}: Minimum number of global nearest neighbors required to keep a datapoint "
+        "during \"voting off the island.\" 3 is generally a good choice. 0 is the equivalent of disabling \"voting off the "
+        "island,\" and it is recommended to also pass 0 for neighborsChecked in this case.\n"
+        "\t datasetFilepath: File containing dataset to run k fold cross validation on. The first row must be the "
+        "header; the first column must be the class column; and subsequent columns must be the features. Prepending "
+        "\"nonNum\" to a column name will cause that column and all subsequent columns to be disregarded.\n"
+        "\t cacheDirectory: Folder where output logs from training and testing will be stored.\n\n"
+        "Recommendation: Redirect the standard output to a file to save additional helpful information, including "
+        "confusion matrices for the classes and \"none of the above\" (NOTA) points.\n";
 
-bool isNonnegativeDouble(char* value) {
-    size_t decimalPointCount = 0;
-    for (size_t i = 0; i < std::strlen(value); ++i) {
-        if (!isdigit(value[i])) {
-            if (value[i] == '.' && decimalPointCount == 0) {
-                ++decimalPointCount;
-            }
-            else {
-                return false;
-            }
-        }
-    }
-    return true;
+    std::cout << helpMsg;
 }
 
 int main(int argc, char* argv[]) {
-    // Command line arguments can optionally include the p value threshold
-    double pvalueThreshold;
-    std::string datasetFilename;
-    if (argc == 2) {
-        pvalueThreshold = -1;
-        datasetFilename = argv[1];
-    }
-    else if (argc == 3) {
-        if (!isNonnegativeDouble(argv[1])) {
-            std::cout << "pvalueThreshold must be nonnegative double.\n";
-            return 0;
-        }
-        pvalueThreshold = std::atof(argv[1]);
-        datasetFilename = argv[2];
-    }
-    else {
-        std::cout << "Incorrect number of command line arguments passed.\n";
-        std::cout << "Format: executable [pvalueThreshold] datasetFilepath\n";
-        std::cout << "Example: ./cpv.exe 0.50 filename.csv\n";
-        return 0;
-    }
-
-    std::vector<ClassMember> dataset = readFormattedDataset(datasetFilename);
-
-    std::vector<ClassMember> kSets[K_FOLDS];
-    kFoldSplit(dataset, kSets);
-
-    setThreads();
-
-    std::unordered_map<std::string, double[5]> predictionStatistics;
-
-    for (int i = 0; i < K_FOLDS; ++i) {
-        std::vector<ClassMember> trainDataset;
-        
-        for (int j = 0; j < K_FOLDS; ++j) {
-            if (j != i) {
-                trainDataset.reserve(trainDataset.size() + kSets[j].size());
-                trainDataset.insert(trainDataset.end(), kSets[j].begin(), kSets[j].end());
+    switch (argc) {
+        case 4:
+            runFromPValues(argv);
+            break;
+        case 5:
+            runFromNNDistances(argv);
+            break;
+        case 8:
+            runFull(argc, argv);
+            break;
+        case 10:
+            runFull(argc, argv);
+            break;
+        default:
+            if (argc > 1 && std::strcmp(argv[1], "-H") == 0) {
+                printDetailedHelp();
             }
-        }
-        
-        std::cout << "Iteration " << i << ":\n";
-
-        std::unordered_map<std::string, std::vector<double> > sorted_distances = process(trainDataset);
-
-        fitClasses(sorted_distances);
-
-        if (pvalueThreshold == -1) {
-            test(kSets[i], predictionStatistics, i);
-        }
-        else {
-            test(kSets[i], predictionStatistics, i, pvalueThreshold);
-        }
-    }
+            else {
+                printBasicHelp();
+            }
+    } 
 }

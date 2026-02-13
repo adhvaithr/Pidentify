@@ -12,11 +12,15 @@ struct FitResult {
     double wrmsError;
 };
 
-int fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_distances);
+void fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_distances, size_t iteration);
+void fitClasses(const std::unordered_map<std::string, std::vector<double> >& sorted_distances,
+    const std::unordered_map<std::string, std::vector<double> >& y_values);
 double logistic(double k, double alpha, double x);
 double hyperbolic_tangent(double k, double alpha, double x);
 double arctangent(double k, double alpha, double x);
 double gudermannian(double k, double alpha, double x);
+double gompertz(double k, double alpha, double x);
+double erf_sigmoid(double k, double alpha, double x);
 double algebraic(double k, double alpha, double x);
 
 #endif

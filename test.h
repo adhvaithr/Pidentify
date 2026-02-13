@@ -4,14 +4,18 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
-#include <limits>
 #include "classMember.h"
 
-const double PVALUE_INCREMENT = 5.0;
-const int TOTAL_DYNAMIC_PVALUES = 5;
-const std::vector<double> CONSTANT_PVALUE_THRESHOLDS = { 0.50, 0.30, 0.10, 0.05 };
+const static int PVALUE_NUMERATOR_MAX = 10;
 
-void kFoldSplit(std::vector<ClassMember>& dataset, std::vector<ClassMember> kSets[]);
-void test(const std::vector<ClassMember>& dataset, std::unordered_map<std::string, double[5]>& predictionStatistics, size_t fold, double pvalueThreshold = std::numeric_limits<double>::lowest());
+void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& dataset,
+	std::unordered_map<std::string, std::vector<ClassMember> > kSets[], size_t maxPerClass = 1000);
+void setPValueThreshold(const std::string& threshold);
+
+void test(std::vector<ClassMember>& dataset, size_t fold);
+void test(const std::vector<ClassMember>& dataset,
+	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold);
+void test(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
+	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold);
 
 #endif
