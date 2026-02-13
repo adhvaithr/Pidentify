@@ -79,6 +79,19 @@ void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& data
 	std::sort(MODEL_STATE.classNames.begin(), MODEL_STATE.classNames.end());
 }
 
+std::unordered_map<std::string, double[PVALUE_NUMERATOR_MAX] > createPerClassPValueThresholds() {
+	std::unordered_map<std::string, double[PVALUE_NUMERATOR_MAX]> pvalueThresholds;
+
+	for (const auto& pair : MODEL_STATE.numInstancesPerClass) {
+		for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+			pvalueThresholds[pair.first][pvalCat] = (pvalCat + 1) / pair.second;
+		}
+	}
+
+	return pvalueThresholds;
+}
+
+/*
 std::unordered_map<std::string, double> createPerClassPValueThresholds() {
 	std::unordered_map<std::string, double> pvalueThresholds;
 
@@ -88,6 +101,7 @@ std::unordered_map<std::string, double> createPerClassPValueThresholds() {
 
 	return pvalueThresholds;
 }
+*/
 
 void setPValueThreshold(const std::string& threshold) {
 	if (threshold == "default") {
@@ -98,11 +112,9 @@ void setPValueThreshold(const std::string& threshold) {
 			1.0, [](double a, const std::pair<std::string, double>& b) { return a * (1.0 / b.second); });
 		TEST_RESULTS.pvalueThreshold = std::pow(total, 1.0 / MODEL_STATE.numInstancesPerClass.size());
 	}
-	/*
 	else if (threshold == "per class") {
 		TEST_RESULTS.perClassThresholds = createPerClassPValueThresholds();
 	}
-	*/
 	else {
 		TEST_RESULTS.pvalueThreshold = std::stod(threshold);
 	}
@@ -279,6 +291,7 @@ void printPValues(const std::vector<ClassMember>& dataset, const std::vector<std
 	}
 }
 
+/*
 // Increment the overall prediction statistics for all the different NOTA point categories
 void incrementOverallPredStats(size_t idx) {
 	for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
@@ -298,7 +311,30 @@ void incrementAllConfusionMatrices(const std::string& className, size_t idx) {
 		++TEST_RESULTS.voidConfusionMatrix[i][className][idx];
 	}
 }
+*/
 
+// Increment the overall prediction statistics for all the different NOTA point categories
+void incrementOverallPredStats(size_t pvalCat, size_t idx) {
+	for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+		++TEST_RESULTS.overallHyperspacePredStats[pvalCat][static_cast<NOTACategory>(i)][idx];
+	}
+	for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+		++TEST_RESULTS.overallVoidPredStats[pvalCat][i][idx];
+	}
+}
+
+// Increment the confusion matrix of a class for all the different NOTA point categories
+void incrementAllConfusionMatrices(const std::string& className, size_t pvalCat, size_t idx) {
+	for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+		++TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][static_cast<NOTACategory>(i)][className][idx];
+	}
+	for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+		++TEST_RESULTS.voidConfusionMatrix[pvalCat][i][className][idx];
+	}
+}
+
+// Previous version that work using just one p value threshold
+/*
 std::vector<std::pair<std::string, std::string> > calculateStatistics(const std::vector<ClassMember>& dataset,
 	const std::vector<std::unordered_map<std::string, double> >& pvalues, double pvalueThreshold) {
 	size_t total = dataset.size();
@@ -371,24 +407,247 @@ std::vector<std::pair<std::string, std::string> > calculateStatistics(const std:
 
 	return classifications;
 }
+*/
 
+// Previous version that work with one type of per class p value threshold
+/*
+std::vector<std::pair<std::string, std::string> > calculateStatistics(const std::vector<ClassMember>& dataset,
+	const std::vector<std::unordered_map<std::string, double> >& pvalues) {
+	size_t total = dataset.size();
+	std::vector<std::pair<std::string, std::string> > classifications(total);
+	double pvalueThreshold;
+
+	for (size_t i = 0; i < total; ++i) {
+		std::string expectedClass = dataset[i].name;
+
+		// If the current point is a NOTA point, adjust the name to reflect the specific category
+		if (expectedClass == "NOTA") {
+			if (dataset[i].NOTALocation == NOTACategory::VOID) {
+				expectedClass = "Void" + std::to_string(static_cast<int>(dataset[i].NNUnitsFromClass));
+			}
+			else {
+				expectedClass = "Hyperspace" + std::to_string(dataset[i].NOTALocation);
+			}
+		}
+
+		// Find the largest p value for the datapoint
+		auto largestPValue = std::max_element(pvalues[i].begin(), pvalues[i].end(), [](const std::pair<std::string, double>& p1, const std::pair<std::string, double>& p2) {
+			return p1.second < p2.second;
+			});
+
+		pvalueThreshold = (TEST_RESULTS.pvalueThreshold >= 0) ? TEST_RESULTS.pvalueThreshold : TEST_RESULTS.perClassThresholds.at(largestPValue->first);
+
+		// Tally whether the p value indicates the correct/incorrect class or none of the above (NOTA) for overall statistics
+		// Tally whether p value indicates a true positive, false positive, or false negative for a class
+		if (largestPValue->second >= pvalueThreshold) {
+			if (dataset[i].name == "NOTA") {
+				if (dataset[i].NOTALocation == NOTACategory::VOID) {
+					++TEST_RESULTS.voidConfusionMatrix[dataset[i].NNUnitsFromClass][largestPValue->first][2];
+					++TEST_RESULTS.voidRandomPoints[dataset[i].NNUnitsFromClass][2];
+				}
+				else {
+					++TEST_RESULTS.hyperspaceConfusionMatrix[dataset[i].NOTALocation][largestPValue->first][2];
+					++TEST_RESULTS.hyperspaceRandomPoints[dataset[i].NOTALocation][2];
+				}
+			}
+			else if (largestPValue->first == expectedClass) {
+				incrementOverallPredStats(0);
+				incrementAllConfusionMatrices(largestPValue->first, 0);
+			}
+			else {
+				incrementOverallPredStats(1);
+				incrementAllConfusionMatrices(largestPValue->first, 2);
+				incrementAllConfusionMatrices(expectedClass, 1);
+			}
+			classifications[i] = { expectedClass, largestPValue->first };
+		}
+		else {
+			if (dataset[i].name == "NOTA") {
+				if (dataset[i].NOTALocation == NOTACategory::VOID) {
+					++TEST_RESULTS.voidRandomPoints[dataset[i].NNUnitsFromClass][1];
+				}
+				else {
+					++TEST_RESULTS.hyperspaceRandomPoints[dataset[i].NOTALocation][1];
+				}
+			}
+			else {
+				incrementOverallPredStats(2);
+				incrementAllConfusionMatrices(expectedClass, 1);
+				for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+					++TEST_RESULTS.hyperspaceRandomPoints[static_cast<NOTACategory>(i)][3];
+				}
+				for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+					++TEST_RESULTS.voidRandomPoints[i][3];
+				}
+			}
+			classifications[i] = { expectedClass, "NOTA" };
+		}
+	}
+
+	
+	std::cout << "Hyperspace 40:\n";
+	printf("Overall prediction statistics: %f, %f, %f\n", TEST_RESULTS.overallHyperspacePredStats[NOTACategory::HYPERSPACE40][0],
+		TEST_RESULTS.overallHyperspacePredStats[NOTACategory::HYPERSPACE40][1], TEST_RESULTS.overallHyperspacePredStats[NOTACategory::HYPERSPACE40][2]);
+	printf("Confusion Matrices: \n");
+	for (const auto& pair : TEST_RESULTS.hyperspaceConfusionMatrix[NOTACategory::HYPERSPACE40]) {
+		std::cout << pair.first << ": ";
+		for (size_t i = 0; i < 3; ++i)
+			std::cout << pair.second[i] << ", ";
+		std::cout << std::endl;
+	}
+	std::cout << "NOTA Points: ";
+	for (size_t i = 1; i < 5; ++i) std::cout << TEST_RESULTS.hyperspaceRandomPoints[NOTACategory::HYPERSPACE40][i] << ", ";
+	std::cout << std::endl;
+
+	std::cout << "Void 0.6:\n";
+	std::cout << "Overall prediction statistics: ";
+	for (size_t i = 0; i < 3; ++i) std::cout << TEST_RESULTS.overallVoidPredStats[5][i] << ", ";
+	std::cout << std::endl;
+	std::cout << "Confusion Matrices: \n";
+	for (const auto& pair : TEST_RESULTS.voidConfusionMatrix[5]) {
+		std::cout << pair.first << ": ";
+		for (size_t i = 0; i < 3; ++i)
+			std::cout << pair.second[i] << ", ";
+		std::cout << std::endl;
+	}
+	std::cout << "NOTA Points: ";
+	for (size_t i = 1; i < 5; ++i) std::cout << TEST_RESULTS.voidRandomPoints[5][i] << ", ";
+	std::cout << std::endl;
+	
+
+	return classifications;
+}
+*/
+
+/*
 std::vector<std::pair<std::string, std::string> > calculateStatistics(const std::vector<ClassMember>& dataset,
 	const std::vector<std::unordered_map<std::string, double> >& pvalues) {
 	std::vector<std::pair<std::string, std::string> > classifications;
 
-	classifications = calculateStatistics(dataset, pvalues, TEST_RESULTS.pvalueThreshold);
-	/*
+	//classifications = calculateStatistics(dataset, pvalues, TEST_RESULTS.pvalueThreshold);
+	
 	if (TEST_RESULTS.pvalueThreshold >= 0) {
 		classifications = calculateStatistics(dataset, pvalues, TEST_RESULTS.pvalueThreshold);
 	}
 	else {
 		classifications = calculateStatistics(dataset, pvalues, TEST_RESULTS.perClassThresholds);
 	}
+	
+
+	return classifications;
+}
+*/
+
+std::vector<std::pair<std::string, std::string> > calculateStatistics(const std::vector<ClassMember>& dataset,
+	const std::vector<std::unordered_map<std::string, double> >& pvalues) {
+	size_t total = dataset.size();
+	std::vector<std::pair<std::string, std::string> > classifications(total);
+	double pvalueThreshold;
+
+	for (size_t i = 0; i < total; ++i) {
+		std::string expectedClass = dataset[i].name;
+
+		// If the current point is a NOTA point, adjust the name to reflect the specific category
+		if (expectedClass == "NOTA") {
+			if (dataset[i].NOTALocation == NOTACategory::VOID) {
+				expectedClass = "Void" + std::to_string(static_cast<int>(dataset[i].NNUnitsFromClass));
+			}
+			else {
+				expectedClass = "Hyperspace" + std::to_string(dataset[i].NOTALocation);
+			}
+		}
+
+		// Find the largest p value for the datapoint
+		auto largestPValue = std::max_element(pvalues[i].begin(), pvalues[i].end(), [](const std::pair<std::string, double>& p1, const std::pair<std::string, double>& p2) {
+			return p1.second < p2.second;
+			});
+
+		for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+			pvalueThreshold = (TEST_RESULTS.pvalueThreshold >= 0) ? TEST_RESULTS.pvalueThreshold : TEST_RESULTS.perClassThresholds.at(largestPValue->first)[pvalCat];
+
+			// Tally whether the p value indicates the correct/incorrect class or none of the above (NOTA) for overall statistics
+			// Tally whether p value indicates a true positive, false positive, or false negative for a class
+			if (largestPValue->second >= pvalueThreshold) {
+				if (dataset[i].name == "NOTA") {
+					if (dataset[i].NOTALocation == NOTACategory::VOID) {
+						++TEST_RESULTS.voidConfusionMatrix[pvalCat][dataset[i].NNUnitsFromClass][largestPValue->first][2];
+						++TEST_RESULTS.voidRandomPoints[pvalCat][dataset[i].NNUnitsFromClass][2];
+					}
+					else {
+						++TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][dataset[i].NOTALocation][largestPValue->first][2];
+						++TEST_RESULTS.hyperspaceRandomPoints[pvalCat][dataset[i].NOTALocation][2];
+					}
+				}
+				else if (largestPValue->first == expectedClass) {
+					incrementOverallPredStats(pvalCat, 0);
+					incrementAllConfusionMatrices(largestPValue->first, pvalCat, 0);
+				}
+				else {
+					incrementOverallPredStats(pvalCat, 1);
+					incrementAllConfusionMatrices(largestPValue->first, pvalCat, 2);
+					incrementAllConfusionMatrices(expectedClass, pvalCat, 1);
+				}
+			}
+			else {
+				if (dataset[i].name == "NOTA") {
+					if (dataset[i].NOTALocation == NOTACategory::VOID) {
+						++TEST_RESULTS.voidRandomPoints[pvalCat][dataset[i].NNUnitsFromClass][1];
+					}
+					else {
+						++TEST_RESULTS.hyperspaceRandomPoints[pvalCat][dataset[i].NOTALocation][1];
+					}
+				}
+				else {
+					incrementOverallPredStats(pvalCat, 2);
+					incrementAllConfusionMatrices(expectedClass, pvalCat, 1);
+					for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+						++TEST_RESULTS.hyperspaceRandomPoints[pvalCat][static_cast<NOTACategory>(i)][3];
+					}
+					for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+						++TEST_RESULTS.voidRandomPoints[pvalCat][i][3];
+					}
+				}
+			}
+		}
+	}
+		
+	/*
+	size_t testPvalCat = 4;
+	std::cout << "Hyperspace 40:\n";
+	printf("Overall prediction statistics: %f, %f, %f\n", TEST_RESULTS.overallHyperspacePredStats[testPvalCat][NOTACategory::HYPERSPACE40][0],
+		TEST_RESULTS.overallHyperspacePredStats[testPvalCat][NOTACategory::HYPERSPACE40][1], TEST_RESULTS.overallHyperspacePredStats[testPvalCat][NOTACategory::HYPERSPACE40][2]);
+	printf("Confusion Matrices: \n");
+	for (const auto& pair : TEST_RESULTS.hyperspaceConfusionMatrix[testPvalCat][NOTACategory::HYPERSPACE40]) {
+		std::cout << pair.first << ": ";
+		for (size_t i = 0; i < 3; ++i)
+			std::cout << pair.second[i] << ", ";
+		std::cout << std::endl;
+	}
+	std::cout << "NOTA Points: ";
+	for (size_t i = 1; i < 5; ++i) std::cout << TEST_RESULTS.hyperspaceRandomPoints[testPvalCat][NOTACategory::HYPERSPACE40][i] << ", ";
+	std::cout << std::endl;
+
+	testPvalCat = 7;
+	std::cout << "Void 0.6:\n";
+	std::cout << "Overall prediction statistics: ";
+	for (size_t i = 0; i < 3; ++i) std::cout << TEST_RESULTS.overallVoidPredStats[testPvalCat][5][i] << ", ";
+	std::cout << std::endl;
+	std::cout << "Confusion Matrices: \n";
+	for (const auto& pair : TEST_RESULTS.voidConfusionMatrix[testPvalCat][5]) {
+		std::cout << pair.first << ": ";
+		for (size_t i = 0; i < 3; ++i)
+			std::cout << pair.second[i] << ", ";
+		std::cout << std::endl;
+	}
+	std::cout << "NOTA Points: ";
+	for (size_t i = 1; i < 5; ++i) std::cout << TEST_RESULTS.voidRandomPoints[testPvalCat][5][i] << ", ";
+	std::cout << std::endl;
 	*/
 
 	return classifications;
 }
 
+/*
 void calculateVoidNOTAPointsSummary(size_t idx) {
 	// Determine size of entire dataset used for training/testing plus "randomly placed" points
 	size_t total = MODEL_STATE.datasetSize + TEST_RESULTS.voidRandomPoints[idx][0];
@@ -413,7 +672,34 @@ void calculateVoidNOTAPointsSummary(size_t idx) {
 	randomPoints[4] = total - randomPoints[1] - randomPoints[2] - randomPoints[3];
 	randomPoints[5] = (randomPoints[1] / (randomPoints[1] + randomPoints[2])) * 100;
 }
+*/
 
+void calculateVoidNOTAPointsSummary(size_t pvalCat, size_t idx) {
+	// Determine size of entire dataset used for training/testing plus "randomly placed" points
+	size_t total = MODEL_STATE.datasetSize + TEST_RESULTS.voidRandomPoints[pvalCat][idx][0];
+
+	for (const std::string& className : MODEL_STATE.classNames) {
+		// Calculate number of true negatives for each class
+		double* classConfusionMatrix = TEST_RESULTS.voidConfusionMatrix[pvalCat][idx][className];
+		classConfusionMatrix[3] = total - classConfusionMatrix[0] - classConfusionMatrix[1] - classConfusionMatrix[2];
+
+		// Calculate the precision for each class
+		TEST_RESULTS.voidPrecision[pvalCat][idx][className] = (classConfusionMatrix[0] + classConfusionMatrix[2] == 0) ?
+			0 : (classConfusionMatrix[0] / (classConfusionMatrix[0] + classConfusionMatrix[2])) * 100;
+	}
+
+	for (size_t i = 0; i < 3; ++i) {
+		TEST_RESULTS.overallVoidPredStats[pvalCat][idx][i] /= MODEL_STATE.datasetSize;
+		TEST_RESULTS.overallVoidPredStats[pvalCat][idx][i] *= 100;
+	}
+
+	// Calculate number of true negatives and recall for NOTA points
+	double* randomPoints = TEST_RESULTS.voidRandomPoints[pvalCat][idx];
+	randomPoints[4] = total - randomPoints[1] - randomPoints[2] - randomPoints[3];
+	randomPoints[5] = (randomPoints[1] / (randomPoints[1] + randomPoints[2])) * 100;
+}
+
+/*
 void calculateHyperspaceNOTAPointsSummary(NOTACategory NOTALoc) {
 	// Determine size of entire dataset used for training/testing plus "randomly placed" points
 	size_t total = MODEL_STATE.datasetSize + TEST_RESULTS.hyperspaceRandomPoints[NOTALoc][0];
@@ -438,7 +724,34 @@ void calculateHyperspaceNOTAPointsSummary(NOTACategory NOTALoc) {
 	randomPoints[4] = total - randomPoints[1] - randomPoints[2] - randomPoints[3];
 	randomPoints[5] = (randomPoints[1] / (randomPoints[1] + randomPoints[2])) * 100;
 }
+*/
 
+void calculateHyperspaceNOTAPointsSummary(size_t pvalCat, NOTACategory NOTALoc) {
+	// Determine size of entire dataset used for training/testing plus "randomly placed" points
+	size_t total = MODEL_STATE.datasetSize + TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc][0];
+
+	for (const std::string& className : MODEL_STATE.classNames) {
+		// Calculate number of true negatives for each class
+		double* classConfusionMatrix = TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][NOTALoc][className];
+		classConfusionMatrix[3] = total - classConfusionMatrix[0] - classConfusionMatrix[1] - classConfusionMatrix[2];
+
+		// Calculate the precision for each class
+		TEST_RESULTS.hyperspacePrecision[pvalCat][NOTALoc][className] = (classConfusionMatrix[0] + classConfusionMatrix[2] == 0) ?
+			0 : (classConfusionMatrix[0] / (classConfusionMatrix[0] + classConfusionMatrix[2])) * 100;
+	}
+
+	for (size_t i = 0; i < 3; ++i) {
+		TEST_RESULTS.overallHyperspacePredStats[pvalCat][NOTALoc][i] /= MODEL_STATE.datasetSize;
+		TEST_RESULTS.overallHyperspacePredStats[pvalCat][NOTALoc][i] *= 100;
+	}
+
+	// Calculate number of true negatives and recall for NOTA points
+	double* randomPoints = TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc];
+	randomPoints[4] = total - randomPoints[1] - randomPoints[2] - randomPoints[3];
+	randomPoints[5] = (randomPoints[1] / (randomPoints[1] + randomPoints[2])) * 100;
+}
+
+/*
 void calculateSummary() {
 	for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
 		calculateVoidNOTAPointsSummary(i);
@@ -447,10 +760,23 @@ void calculateSummary() {
 		calculateHyperspaceNOTAPointsSummary(static_cast<NOTACategory>(i));
 	}
 }
+*/
 
+void calculateSummary() {
+	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+		for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+			calculateVoidNOTAPointsSummary(pvalCat, i);
+		}
+		for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+			calculateHyperspaceNOTAPointsSummary(pvalCat, static_cast<NOTACategory>(i));
+		}
+	}
+}
+
+/*
 void printPValueThreshold() {
-	printf("P value threshold: %g\n", TEST_RESULTS.pvalueThreshold);
-	/*
+	//printf("P value threshold: %g\n", TEST_RESULTS.pvalueThreshold);
+	
 	if (TEST_RESULTS.pvalueThreshold >= 0) {
 		printf("P value threshold: %g\n", TEST_RESULTS.pvalueThreshold);
 	}
@@ -461,7 +787,24 @@ void printPValueThreshold() {
 		}
 		std::cout << std::endl;
 	}
-	*/
+	
+}
+*/
+
+void printPValueThreshold(size_t pvalCat) {
+	//printf("P value threshold: %g\n", TEST_RESULTS.pvalueThreshold);
+
+	if (TEST_RESULTS.pvalueThreshold >= 0) {
+		printf("P value threshold: %g\n", TEST_RESULTS.pvalueThreshold);
+	}
+	else {
+		std::cout << "Per class p value thresholds:\n";
+		for (const std::string& className : MODEL_STATE.classNames) {
+			printf("%s: %g\n", className.c_str(), TEST_RESULTS.perClassThresholds.at(className)[pvalCat]);
+		}
+		std::cout << std::endl;
+	}
+
 }
 
 void printPredCategories(double* overallPredStats) {
@@ -521,6 +864,7 @@ void printNOTAStatistics(double* NOTAPoints) {
 
 // Print out summary of percentages correct, incorrect, and none of the above, and the average number of classes over
 // the p value threshold
+/*
 void printSummary() {
 	std::cout << "\n--------------------------" << std::endl;
 	std::cout << "\nSummary Statistics:\n";
@@ -550,6 +894,41 @@ void printSummary() {
 		printPredCategories(TEST_RESULTS.overallVoidPredStats[i]);
 		printPredCategoriesAllClasses(TEST_RESULTS.voidConfusionMatrix[i], TEST_RESULTS.voidPrecision[i]);
 		printNOTAStatistics(TEST_RESULTS.voidRandomPoints[i]);
+	}
+}
+*/
+
+void printSummary() {
+	std::cout << "\n--------------------------" << std::endl;
+	std::cout << "\nSummary Statistics:\n";
+	std::cout << "\n--------------------------\n";
+
+	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+		printPValueThreshold(pvalCat);
+
+		int upperExtension = HYPERSPACE_MAX_BBOX_EXTENSION * 100;
+		for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+			int lowerExtension = HYPERSPACE_BBOX_LOWER_BOUNDS[i] * 100;
+			NOTACategory NOTALoc = static_cast<NOTACategory>(i);
+
+			std::cout << "\n--------------------------" << std::endl;
+			std::cout << "\nHyperspace NOTA Points (Lower BBOX Extension: " << lowerExtension <<
+				"%, Upper BBOX Extension: " << upperExtension << "%):\n";
+			std::cout << "\n--------------------------\n";
+
+			printPredCategories(TEST_RESULTS.overallHyperspacePredStats[pvalCat][NOTALoc]);
+			printPredCategoriesAllClasses(TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][NOTALoc], TEST_RESULTS.hyperspacePrecision[pvalCat][NOTALoc]);
+			printNOTAStatistics(TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc]);
+		}
+
+		for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+			std::cout << "\n--------------------------" << std::endl;
+			std::cout << "\nVoid NOTA Points (Nearest Neighbor Multiplier: " << NNStepMultiplier(i) << "):\n";
+			std::cout << "\n--------------------------\n";
+			printPredCategories(TEST_RESULTS.overallVoidPredStats[pvalCat][i]);
+			printPredCategoriesAllClasses(TEST_RESULTS.voidConfusionMatrix[pvalCat][i], TEST_RESULTS.voidPrecision[pvalCat][i]);
+			printNOTAStatistics(TEST_RESULTS.voidRandomPoints[pvalCat][i]);
+		}
 	}
 }
 
@@ -686,7 +1065,7 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 	// Calculate the percentage of datapoints predicted correctly, incorrectly, or as none of the above
 	std::vector<std::pair<std::string, std::string> > classifications = calculateStatistics(dataset, pvalues);
 
-	cacheTestPlotInfo(classifications, nnDistances, fold);
+	//cacheTestPlotInfo(classifications, nnDistances, fold);
 
 	// Print out statistics if this is the last fold
 	if (fold == K_FOLDS - 1) {

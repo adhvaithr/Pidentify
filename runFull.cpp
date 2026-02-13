@@ -205,7 +205,7 @@ void runFull(int argc, char* argv[]) {
 
     std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);
     std::unordered_map<std::string, std::vector<ClassMember> > kSets[K_FOLDS];
-    kFoldSplit(dataset, kSets, 1000);
+    kFoldSplit(dataset, kSets, std::numeric_limits<size_t>::max());
 
     CACHE_PATHS.initPaths(cacheDirectory);
     setThreads();
@@ -231,6 +231,7 @@ void runFull(int argc, char* argv[]) {
     }
 
     for (int fold = 0; fold < K_FOLDS; ++fold) {
+        /*
         std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
 
         for (int j = 0; j < K_FOLDS; ++j) {
@@ -242,7 +243,8 @@ void runFull(int argc, char* argv[]) {
                 }
             }
         }
-        //std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, fold);
+        */
+        std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, fold);
 
         std::cout << "Iteration " << fold << ":\n";
 

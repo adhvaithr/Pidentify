@@ -6,6 +6,8 @@
 #include <string>
 #include "classMember.h"
 
+const static int PVALUE_NUMERATOR_MAX = 10;
+
 void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& dataset,
 	std::unordered_map<std::string, std::vector<ClassMember> > kSets[], size_t maxPerClass = 1000);
 void setPValueThreshold(const std::string& threshold);

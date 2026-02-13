@@ -56,11 +56,13 @@ int NNUnitsFromClass(double multiplier) {
 	}
 }
 
+/*
 void insertVoidNOTAPoints(const std::vector<double>& featureMins, const std::vector<double>& featureMaxs, size_t idx,
 	std::mt19937& gen,
 	const std::unordered_map<std::string, KDTreeVectorOfVectorsAdaptor<std::vector<std::vector<double> >, double>* >& kdTrees,
 	const std::vector<std::unordered_map<std::string, double> >& minNNDistances, std::vector<ClassMember>& NOTAPoints) {
 	size_t total = std::max(MODEL_STATE.datasetSize, MIN_NOTA_POINTS);
+	//size_t total = 10;
 	size_t dim = featureMins.size();
 	size_t neighborIndices[1];
 	double squaredDistances[1];
@@ -101,11 +103,63 @@ void insertVoidNOTAPoints(const std::vector<double>& featureMins, const std::vec
 	// Update the state to reflect the total void NOTA points that will be tested on across all folds
 	TEST_RESULTS.voidRandomPoints[idx][0] = created * K_FOLDS;
 }
+*/
 
+void insertVoidNOTAPoints(const std::vector<double>& featureMins, const std::vector<double>& featureMaxs, size_t idx,
+	std::mt19937& gen,
+	const std::unordered_map<std::string, KDTreeVectorOfVectorsAdaptor<std::vector<std::vector<double> >, double>* >& kdTrees,
+	const std::vector<std::unordered_map<std::string, double> >& minNNDistances, std::vector<ClassMember>& NOTAPoints) {
+	size_t total = std::max(MODEL_STATE.datasetSize, MIN_NOTA_POINTS);
+	//size_t total = 10;
+	size_t dim = featureMins.size();
+	size_t neighborIndices[1];
+	double squaredDistances[1];
+
+	// Create random number generators
+	std::vector<std::uniform_real_distribution<double> > featureGenerators(dim);
+	for (size_t i = 0; i < dim; ++i) {
+		featureGenerators[i] = std::move(std::uniform_real_distribution<double>(featureMins[i], featureMaxs[i]));
+	}
+
+	size_t created = 0;
+	bool validNOTAPoint;
+
+	for (size_t attempts = 0, maxAttempts = total * 10; created < total && attempts < maxAttempts; ++attempts) {
+		// Create a new datapoint
+		ClassMember NOTAPoint(std::vector<double>(dim), "NOTA", 0, NOTACategory::VOID, idx);
+		for (size_t i = 0; i < dim; ++i) {
+			NOTAPoint.features[i] = featureGenerators[i](gen);
+		}
+
+		// Check if datapoint satisfies the minimum nearest neighbor distance from classes requirement
+		validNOTAPoint = true;
+		for (const auto& kdTree : kdTrees) {
+			kdTree.second->query(&NOTAPoint.features[0], 1, &neighborIndices[0], &squaredDistances[0]);
+			if (std::sqrt(squaredDistances[0]) < minNNDistances[idx].at(kdTree.first)) {
+				validNOTAPoint = false;
+				break;
+			}
+		}
+
+		// Add datapoint to NOTA points if it satisfies minimum nearest neighbor distance requirement
+		if (validNOTAPoint) {
+			NOTAPoints.push_back(std::move(NOTAPoint));
+			++created;
+		}
+	}
+
+	// Update the state to reflect the total void NOTA points that will be tested on across all folds
+	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+		TEST_RESULTS.voidRandomPoints[pvalCat][idx][0] = created * K_FOLDS;
+	}
+}
+
+/*
 void insertHyperspaceNOTAPoints(const std::vector<std::pair<double, double> >& outerBbox,
 	const std::vector<std::pair<double, double> >& innerBbox, NOTACategory NOTALoc, std::mt19937& gen,
 	std::vector<ClassMember>& NOTAPoints) {
 	size_t total = std::max(MODEL_STATE.datasetSize, MIN_NOTA_POINTS);
+	//size_t total = 10;
 	size_t dim = outerBbox.size();
 
 	// Create random number generators
@@ -141,6 +195,53 @@ void insertHyperspaceNOTAPoints(const std::vector<std::pair<double, double> >& o
 
 	// Update the state to reflect the total hyperspace NOTA points that will be tested on across all folds
 	TEST_RESULTS.hyperspaceRandomPoints[NOTALoc][0] = total * K_FOLDS;
+}
+*/
+
+void insertHyperspaceNOTAPoints(const std::vector<std::pair<double, double> >& outerBbox,
+	const std::vector<std::pair<double, double> >& innerBbox, NOTACategory NOTALoc, std::mt19937& gen,
+	std::vector<ClassMember>& NOTAPoints) {
+	size_t total = std::max(MODEL_STATE.datasetSize, MIN_NOTA_POINTS);
+	//size_t total = 10;
+	size_t dim = outerBbox.size();
+
+	// Create random number generators
+	std::vector<std::uniform_real_distribution<double> > featureGenerators(dim);
+	for (size_t i = 0; i < dim; ++i) {
+		featureGenerators[i] = std::move(std::uniform_real_distribution<double>(outerBbox[i].first, outerBbox[i].second));
+	}
+
+	int genAttempts = 0, maxFeatureGenAttempts = 100;
+
+	for (size_t numCreatedPoints = 0; numCreatedPoints < total; ++numCreatedPoints) {
+		ClassMember NOTAPoint(std::vector<double>(dim), "NOTA", 0, NOTALoc, -1);
+
+		// Generate features between an inner and outer bounding box
+		for (size_t i = 0; i < dim; ++i) {
+			for (genAttempts = 0; genAttempts < maxFeatureGenAttempts; ++genAttempts) {
+				NOTAPoint.features[i] = featureGenerators[i](gen);
+				if (NOTAPoint.features[i] < innerBbox[i].first || NOTAPoint.features[i] > innerBbox[i].second ||
+					std::abs(outerBbox[i].first - innerBbox[i].first) < 1e-6) {
+					break;
+				}
+			}
+
+			// If no longer able to create points between the inner and outer bounding box, abort
+			if (genAttempts >= maxFeatureGenAttempts) {
+				for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+					TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc][0] = numCreatedPoints * K_FOLDS;
+				}
+				return;
+			}
+		}
+
+		NOTAPoints.push_back(std::move(NOTAPoint));
+	}
+
+	// Update the state to reflect the total hyperspace NOTA points that will be tested on across all folds
+	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+		TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc][0] = total * K_FOLDS;
+	}
 }
 
 // Returns a map from the class name to the largest nearest neighbor distance internal to the class
@@ -260,6 +361,7 @@ std::vector<ClassMember> createNOTAPoints(const std::unordered_map<std::string, 
 	return insertRandomPoints(dataset);
 }
 
+/*
 std::vector<ClassMember> readNOTAPointsFromFile(const std::string& NOTAPointsFilename) {
 	std::ifstream NOTAPointsFile(NOTAPointsFilename);
 	std::stringstream ss;
@@ -305,6 +407,63 @@ std::vector<ClassMember> readNOTAPointsFromFile(const std::string& NOTAPointsFil
 	}
 	for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
 		TEST_RESULTS.hyperspaceRandomPoints[static_cast<NOTACategory>(i)][0] *= K_FOLDS;
+	}
+
+	return NOTAPoints;
+}
+*/
+
+std::vector<ClassMember> readNOTAPointsFromFile(const std::string& NOTAPointsFilename) {
+	std::ifstream NOTAPointsFile(NOTAPointsFilename);
+	std::stringstream ss;
+	std::string line, field;
+	int NOTALoc;
+	std::vector<ClassMember> NOTAPoints;
+
+	std::getline(NOTAPointsFile, line);
+	while (std::getline(NOTAPointsFile, line)) {
+		ss.str("");
+		ss.clear();
+		ss << line;
+		ClassMember NOTAPoint;
+
+		std::getline(ss, field, ',');
+		NOTALoc = std::stoi(field);
+		NOTAPoint.NOTALocation = static_cast<NOTACategory>(NOTALoc);
+
+		std::getline(ss, field, ',');
+		NOTAPoint.NNUnitsFromClass = NNUnitsFromClass(std::stod(field));
+
+		while (std::getline(ss, field, ',')) {
+			NOTAPoint.features.emplace_back(std::stod(field));
+		}
+
+		NOTAPoint.name = "NOTA";
+		NOTAPoint.lineNumber = 0;
+
+		if (NOTAPoint.NOTALocation == NOTACategory::VOID) {
+			for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+				++TEST_RESULTS.voidRandomPoints[pvalCat][NOTAPoint.NNUnitsFromClass][0];
+			}
+		}
+		else {
+			for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+				++TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTAPoint.NOTALocation][0];
+			}
+		}
+
+		NOTAPoints.push_back(std::move(NOTAPoint));
+	}
+
+	NOTAPointsFile.close();
+
+	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+		for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+			TEST_RESULTS.voidRandomPoints[pvalCat][i][0] *= K_FOLDS;
+		}
+		for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+			TEST_RESULTS.hyperspaceRandomPoints[pvalCat][static_cast<NOTACategory>(i)][0] *= K_FOLDS;
+		}
 	}
 
 	return NOTAPoints;

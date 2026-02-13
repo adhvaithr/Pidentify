@@ -72,6 +72,7 @@ void writePValuesToCSV(const std::vector<ClassMember>& dataset,
 	fclose(fp);
 }
 
+/*
 void writeNOTACategoryResultsToCSV() {
 	FILE* fp = fopen(CACHE_PATHS.NOTACategoryResultsFilepath.c_str(), "w");
 
@@ -96,6 +97,38 @@ void writeNOTACategoryResultsToCSV() {
 			fprintf(fp, "%.2f,", TEST_RESULTS.hyperspacePrecision[NOTALoc][className]);
 		}
 		fprintf(fp, "%.2f\n", TEST_RESULTS.hyperspaceRandomPoints[NOTALoc][5]);
+	}
+
+	fclose(fp);
+}
+*/
+
+void writeNOTACategoryResultsToCSV() {
+	FILE* fp = fopen(CACHE_PATHS.NOTACategoryResultsFilepath.c_str(), "w");
+
+	fprintf(fp, "category,minNNUnitsFromClass,totalPoints,pvalueNumerator,");
+	for (const std::string& className : MODEL_STATE.classNames) {
+		fprintf(fp, "%sPrecision,", className.c_str());
+	}
+	fprintf(fp, "recall\n");
+
+	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
+		for (int i = 0; i < NUM_NN_STEPS; ++i) {
+			fprintf(fp, "%i,%g,%g,%i,", NOTACategory::VOID, NNStepMultiplier(i), TEST_RESULTS.voidRandomPoints[pvalCat][i][0], pvalCat + 1);
+			for (const std::string& className : MODEL_STATE.classNames) {
+				fprintf(fp, "%.2f,", TEST_RESULTS.voidPrecision[pvalCat][i][className]);
+			}
+			fprintf(fp, "%.2f\n", TEST_RESULTS.voidRandomPoints[pvalCat][i][5]);
+		}
+
+		for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+			NOTACategory NOTALoc = static_cast<NOTACategory>(i);
+			fprintf(fp, "%lu,-1,%g,%i,", i, TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc][0], pvalCat + 1);
+			for (const std::string& className : MODEL_STATE.classNames) {
+				fprintf(fp, "%.2f,", TEST_RESULTS.hyperspacePrecision[pvalCat][NOTALoc][className]);
+			}
+			fprintf(fp, "%.2f\n", TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc][5]);
+		}
 	}
 
 	fclose(fp);
