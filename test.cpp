@@ -79,6 +79,7 @@ void kFoldSplit(std::unordered_map<std::string, std::vector<ClassMember> >& data
 	std::sort(MODEL_STATE.classNames.begin(), MODEL_STATE.classNames.end());
 }
 
+// Create per class p value thresholds for 1/n, ..., 10/n
 std::unordered_map<std::string, double[PVALUE_NUMERATOR_MAX] > createPerClassPValueThresholds() {
 	std::unordered_map<std::string, double[PVALUE_NUMERATOR_MAX]> pvalueThresholds;
 
@@ -91,19 +92,10 @@ std::unordered_map<std::string, double[PVALUE_NUMERATOR_MAX] > createPerClassPVa
 	return pvalueThresholds;
 }
 
-/*
-std::unordered_map<std::string, double> createPerClassPValueThresholds() {
-	std::unordered_map<std::string, double> pvalueThresholds;
-
-	for (const auto& pair : MODEL_STATE.numInstancesPerClass) {
-		pvalueThresholds[pair.first] = 1 / pair.second;
-	}
-
-	return pvalueThresholds;
-}
-*/
-
 void setPValueThreshold(const std::string& threshold) {
+	std::string errorMsg = "Invalid argument: pvalueThreshold must be a decimal number in the range [0, 1) or one of "
+		"{\"default\", \"geometric mean\", \"per class\"}";
+
 	if (threshold == "default") {
 		TEST_RESULTS.pvalueThreshold = 1.0 / MODEL_STATE.datasetSize;
 	}
@@ -116,7 +108,17 @@ void setPValueThreshold(const std::string& threshold) {
 		TEST_RESULTS.perClassThresholds = createPerClassPValueThresholds();
 	}
 	else {
-		TEST_RESULTS.pvalueThreshold = std::stod(threshold);
+		try {
+			TEST_RESULTS.pvalueThreshold = std::stod(threshold);
+
+			if (TEST_RESULTS.pvalueThreshold < 0 || TEST_RESULTS.pvalueThreshold >= 1) {
+				std::cerr << errorMsg << std::endl;
+				std::exit(0);
+			}
+		} catch (const std::exception&) {
+			std::cerr << errorMsg << std::endl;
+			std::exit(0);
+		}
 	}
 }
 
@@ -898,6 +900,39 @@ void printSummary() {
 }
 */
 
+void printSummaryWithNOTA(int pvalCat) {
+	int upperExtension = HYPERSPACE_MAX_BBOX_EXTENSION * 100;
+	for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
+		int lowerExtension = HYPERSPACE_BBOX_LOWER_BOUNDS[i] * 100;
+		NOTACategory NOTALoc = static_cast<NOTACategory>(i);
+
+		std::cout << "\n--------------------------" << std::endl;
+		std::cout << "\nHyperspace NOTA Points (Lower BBOX Extension: " << lowerExtension <<
+			"%, Upper BBOX Extension: " << upperExtension << "%):\n";
+		std::cout << "\n--------------------------\n";
+
+		printPredCategories(TEST_RESULTS.overallHyperspacePredStats[pvalCat][NOTALoc]);
+		printPredCategoriesAllClasses(TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][NOTALoc], TEST_RESULTS.hyperspacePrecision[pvalCat][NOTALoc]);
+		printNOTAStatistics(TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc]);
+	}
+
+	for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
+		std::cout << "\n--------------------------" << std::endl;
+		std::cout << "\nVoid NOTA Points (Nearest Neighbor Multiplier: " << NNStepMultiplier(i) << "):\n";
+		std::cout << "\n--------------------------\n";
+		printPredCategories(TEST_RESULTS.overallVoidPredStats[pvalCat][i]);
+		printPredCategoriesAllClasses(TEST_RESULTS.voidConfusionMatrix[pvalCat][i], TEST_RESULTS.voidPrecision[pvalCat][i]);
+		printNOTAStatistics(TEST_RESULTS.voidRandomPoints[pvalCat][i]);
+	}
+}
+
+void printSummaryWithoutNOTA(int pvalCat) {
+	printPredCategories(TEST_RESULTS.overallHyperspacePredStats[pvalCat][NOTACategory::HYPERSPACE0]);
+	printPredCategoriesAllClasses(TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][NOTACategory::HYPERSPACE0],
+		TEST_RESULTS.hyperspacePrecision[pvalCat][NOTACategory::HYPERSPACE0]);
+	std::cout << "\n--------------------------" << std::endl;
+}
+
 void printSummary() {
 	std::cout << "\n--------------------------" << std::endl;
 	std::cout << "\nSummary Statistics:\n";
@@ -906,28 +941,11 @@ void printSummary() {
 	for (int pvalCat = 0; pvalCat < PVALUE_NUMERATOR_MAX; ++pvalCat) {
 		printPValueThreshold(pvalCat);
 
-		int upperExtension = HYPERSPACE_MAX_BBOX_EXTENSION * 100;
-		for (size_t i = 0; i < HYPERSPACE_LOWER_BOUNDS; ++i) {
-			int lowerExtension = HYPERSPACE_BBOX_LOWER_BOUNDS[i] * 100;
-			NOTACategory NOTALoc = static_cast<NOTACategory>(i);
-
-			std::cout << "\n--------------------------" << std::endl;
-			std::cout << "\nHyperspace NOTA Points (Lower BBOX Extension: " << lowerExtension <<
-				"%, Upper BBOX Extension: " << upperExtension << "%):\n";
-			std::cout << "\n--------------------------\n";
-
-			printPredCategories(TEST_RESULTS.overallHyperspacePredStats[pvalCat][NOTALoc]);
-			printPredCategoriesAllClasses(TEST_RESULTS.hyperspaceConfusionMatrix[pvalCat][NOTALoc], TEST_RESULTS.hyperspacePrecision[pvalCat][NOTALoc]);
-			printNOTAStatistics(TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc]);
+		if (MODEL_STATE.doNOTATesting) {
+			printSummaryWithNOTA(pvalCat);
 		}
-
-		for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
-			std::cout << "\n--------------------------" << std::endl;
-			std::cout << "\nVoid NOTA Points (Nearest Neighbor Multiplier: " << NNStepMultiplier(i) << "):\n";
-			std::cout << "\n--------------------------\n";
-			printPredCategories(TEST_RESULTS.overallVoidPredStats[pvalCat][i]);
-			printPredCategoriesAllClasses(TEST_RESULTS.voidConfusionMatrix[pvalCat][i], TEST_RESULTS.voidPrecision[pvalCat][i]);
-			printNOTAStatistics(TEST_RESULTS.voidRandomPoints[pvalCat][i]);
+		else {
+			printSummaryWithoutNOTA(pvalCat);
 		}
 	}
 }
@@ -1070,7 +1088,9 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 	// Print out statistics if this is the last fold
 	if (fold == K_FOLDS - 1) {
 		calculateSummary();
-		writeNOTACategoryResultsToCSV();
+		if (MODEL_STATE.doNOTATesting) {
+			writeNOTACategoryResultsToCSV();
+		}
 		printSummary();
 	}
 }

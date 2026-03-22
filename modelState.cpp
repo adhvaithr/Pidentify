@@ -23,7 +23,8 @@ void ModelState::setWeightExp(const std::string& weightScheme) {
 		weightExp = 1.0 / 3.0;
 	}
 	else {
-		std::cerr << "ERROR: Weight scheme must be one of: \"squared\", \"linear\", \"unweighted\", \"cube root\"\n";
+		std::cerr << "Invalid Argument: weightScheme must be one of {\"squared\", \"linear\", \"unweighted\", " <<
+			"\"cube root\"}" << std::endl;
 		std::exit(0);
 	}
 }

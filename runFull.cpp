@@ -184,28 +184,90 @@ void setSigmoidFitsFromFile(const std::string& sigmoidFitsFilename) {
     }
 }
 
-void runFull(int argc, char* argv[]) {
-    std::string weightScheme = argv[1];
-    std::string pValueThreshold = argv[2];
-    bool applyFeatureWeighting = std::atoi(argv[3]);
-    int numNeighborsChecked = std::atoi(argv[4]);
-    int minSameClassCount = std::atoi(argv[5]);
+bool isDigit(char str[]) {
+    for (size_t i = 0; str[i] != '\0'; ++i) {
+        if (!(str[i] >= 48 && str[i] <= 57)) {
+            return false;
+        }
+    }
+    return str[0] != '\0';
+}
 
-    std::string sigmoidFitsFilename, NOTAPointsFilename, datasetFilename, cacheDirectory;
-    if (argc == 10) {
-        sigmoidFitsFilename = argv[6];
-        NOTAPointsFilename = argv[7];
-        datasetFilename = argv[8];
-        cacheDirectory = argv[9];
+void parseArgs(int argc, char* argv[], std::string& weightScheme, std::string& pValueThreshold, bool& applyFeatureWeighting,
+    int& numNeighborsChecked, int& minSameClassCount, std::string& sigmoidFitsFilename, std::string& NOTAPointsFilename,
+    std::string& datasetFilename, std::string& cacheDirectory) {
+    weightScheme = argv[1];
+    pValueThreshold = argv[2];
+
+    if (!(std::strcmp(argv[3], "0") == 0) && !(std::strcmp(argv[3], "1") == 0)) {
+        std::cerr << "Invalid Argument: featureWeighting must be one of {0, 1}" << std::endl;
+        std::exit(0);
+    }
+    applyFeatureWeighting = std::atoi(argv[3]);
+
+    if (!isDigit(argv[4])) {
+        std::cerr << "Invalid Argument: neighborsChecked must be a non negative integer" << std::endl;
+        std::exit(0);
+    }
+    numNeighborsChecked = std::atoi(argv[4]);
+
+    if (!isDigit(argv[5])) {
+        std::cerr << "Invalid Argument: minSameClass must be a non negative integer" << std::endl;
+        std::exit(0);
+    }
+    minSameClassCount = std::atoi(argv[5]);
+    if (minSameClassCount > numNeighborsChecked) {
+        std::cerr << "Invalid Argument: minSameClass must be less than or equal to neighborsChecked" << std::endl;
+        std::exit(0);
+    }
+
+    if (!(std::strcmp(argv[6], "0") == 0) && !(std::strcmp(argv[6], "1") == 0)) {
+        std::cerr << "Invalid Argument: doNOTATesting must be one of {0, 1}" << std::endl;
+        std::exit(0);
+    }
+    MODEL_STATE.doNOTATesting = std::atoi(argv[6]);
+
+    if (argc == 11) {
+        sigmoidFitsFilename = argv[7];
+        NOTAPointsFilename = argv[8];
+
+        if (sigmoidFitsFilename != "" && !fileExists(sigmoidFitsFilename)) {
+            std::cerr << "Invalid Argument: sigmoidFitsFilepath \"" << sigmoidFitsFilename << "\" does not exist" << std::endl;
+            std::exit(0);
+        }
+        if (NOTAPointsFilename != "" && !fileExists(NOTAPointsFilename)) {
+            std::cerr << "Invalid Argument: NOTAPointsFilepath \"" << NOTAPointsFilename << "\" does not exist" << std::endl;
+            std::exit(0);
+        }
+
+        datasetFilename = argv[9];
+        cacheDirectory = argv[10];
     }
     else {
-        datasetFilename = argv[6];
-        cacheDirectory = argv[7];
+        datasetFilename = argv[7];
+        cacheDirectory = argv[8];
     }
+
+    if (!fileExists(datasetFilename)) {
+        std::cerr << "Invalid Argument: datasetFilepath \"" << datasetFilename << "\" does not exist" << std::endl;
+        std::exit(0);
+    }
+}
+
+void runFull(int argc, char* argv[]) {
+    std::string weightScheme, pValueThreshold, sigmoidFitsFilename, NOTAPointsFilename, datasetFilename, cacheDirectory;
+    bool applyFeatureWeighting;
+    int numNeighborsChecked, minSameClassCount;
+
+    parseArgs(argc, argv, weightScheme, pValueThreshold, applyFeatureWeighting, numNeighborsChecked, minSameClassCount,
+        sigmoidFitsFilename, NOTAPointsFilename, datasetFilename, cacheDirectory);
+
+    createFolder(cacheDirectory.c_str());
 
     std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);
     std::unordered_map<std::string, std::vector<ClassMember> > kSets[K_FOLDS];
-    kFoldSplit(dataset, kSets, std::numeric_limits<size_t>::max());
+    //kFoldSplit(dataset, kSets, std::numeric_limits<size_t>::max());
+    kFoldSplit(dataset, kSets, 1000);
 
     CACHE_PATHS.initPaths(cacheDirectory);
     setThreads();
@@ -223,15 +285,18 @@ void runFull(int argc, char* argv[]) {
     setPValueThreshold(pValueThreshold);
     MODEL_STATE.preexistingBestfit = fileExists(sigmoidFitsFilename);
 
-    std::vector<ClassMember> NOTAPoints = (fileExists(NOTAPointsFilename)) ? readNOTAPointsFromFile(NOTAPointsFilename)
-        : createNOTAPoints(dataset);
+    std::vector<ClassMember> NOTAPoints;
+    if (MODEL_STATE.doNOTATesting) {
+        NOTAPoints = (fileExists(NOTAPointsFilename)) ? readNOTAPointsFromFile(NOTAPointsFilename)
+            : createNOTAPoints(dataset);
+    }    
 
     if (MODEL_STATE.preexistingBestfit) {
         setSigmoidFitsFromFile(sigmoidFitsFilename);
     }
 
     for (int fold = 0; fold < K_FOLDS; ++fold) {
-        /*
+        
         std::unordered_map<std::string, std::vector<ClassMember> > trainDataset;
 
         for (int j = 0; j < K_FOLDS; ++j) {
@@ -243,8 +308,8 @@ void runFull(int argc, char* argv[]) {
                 }
             }
         }
-        */
-        std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, fold);
+        
+        //std::unordered_map<std::string, std::vector<ClassMember> > trainDataset = createTrainDataset(kSets, fold);
 
         std::cout << "Iteration " << fold << ":\n";
 
