@@ -279,7 +279,6 @@ void curveFitting(std::vector<double> sorted_distances, std::vector<double> y_va
     // nonlinear square curve fitting for Gompertz function
     // ----------------------------------------------------------------------
     fitFunction(x, y, w, &gompertz_f, &gompertz_fd, "Gompertz function", results, "[1e-30, 1e-30]");
-    //fitFunction(x, y, w, &gompertz_f, &gompertz_fd, "Gompertz function", results, "[30, -200]", "[1e30, 1e30]", 1e-9, 1000);
 
     // Nonlinear squares curve fitting for error function based sigmoid
     fitFunction(x, y, w, &erf_sigmoid_f, &erf_sigmoid_fd, "error function based sigmoid", results, "[-INF, -INF]", "[+INF, +INF]");
@@ -345,14 +344,6 @@ void fitClasses(std::unordered_map<std::string, std::vector<double> >& sorted_di
         }
         fclose(fp);
         // Ending of saving ECDF points
-        
-        /*
-        // Insert (0,0) and faraway point into ECDF points
-        pair.second.insert(pair.second.begin(), 0);
-        y[0] = 1;
-        pair.second.insert(pair.second.end(), 1);
-        y[l + 1] = 0;
-        */
         
         std::packaged_task<void(std::vector<double>, std::vector<double>, double, std::string)> parallelCurveFitting{ curveFitting };
         results[pair.first] = parallelCurveFitting.get_future();
