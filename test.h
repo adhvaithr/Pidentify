@@ -17,5 +17,6 @@ void test(const std::vector<ClassMember>& dataset,
 	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold);
 void test(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
 	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold);
+void testProduction(std::string& testSetFilename);
 
 #endif

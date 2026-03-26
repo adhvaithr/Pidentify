@@ -18,6 +18,7 @@
 #include "test.h"
 #include "saveResults.h"
 #include "NOTAPoints.h"
+#include "readDataset.h"
 
 std::unordered_map<std::string, std::vector<ClassMember> > createTrainDataset(
     std::unordered_map<std::string, std::vector<ClassMember> > kSets[], size_t fold) {
@@ -63,38 +64,13 @@ std::unordered_map<std::string, std::vector<ClassMember> > createTrainDataset(
 
 std::unordered_map<std::string, std::vector<ClassMember> > readFormattedDataset(const std::string& filename) {
     std::unordered_map<std::string, std::vector<ClassMember> > dataset;
-    std::ifstream file(filename);
-    std::string line;
+    DatasetReader datasetReader(filename);
 
-    // Read the header
-    std::getline(file, line);
-    std::stringstream header(line);
-    std::string colName;
-    int numFeatures = 0;
-    std::getline(header, colName, ',');
-    // Count the number of numerical features
-    while (std::getline(header, colName, ',')) {
-        if (colName.compare(0, 6, "nonNum") == 0) {
-            break;
-        }
-        numFeatures += 1;
+    ClassMember obj = datasetReader.getNextPoint();
+    while (obj.features.size() > 0) {
+        dataset[obj.name].push_back(std::move(obj));
+        obj = datasetReader.getNextPoint();
     }
-
-    size_t lineNumber = 2;
-    // Only add the numerical features to the ClassMember vector
-    while (std::getline(file, line)) {
-        std::stringstream ss(line);
-        ClassMember obj;
-        std::string feature;
-        std::getline(ss, obj.name, ',');
-        for (int i = 0; i < numFeatures; ++i) {
-            std::getline(ss, feature, ',');
-            obj.features.push_back(std::stod(feature));
-        }
-        obj.lineNumber = lineNumber++;
-        dataset[obj.name].push_back(obj);
-    }
-    file.close();
 
     return dataset;
 }
@@ -193,7 +169,7 @@ bool isDigit(char str[]) {
     return str[0] != '\0';
 }
 
-void parseArgs(int argc, char* argv[], std::string& weightScheme, std::string& pValueThreshold, bool& applyFeatureWeighting,
+void parseFullArgs(int argc, char* argv[], std::string& weightScheme, std::string& pValueThreshold, bool& applyFeatureWeighting,
     int& numNeighborsChecked, int& minSameClassCount, std::string& sigmoidFitsFilename, std::string& NOTAPointsFilename,
     std::string& datasetFilename, std::string& cacheDirectory) {
     weightScheme = argv[1];
@@ -227,7 +203,7 @@ void parseArgs(int argc, char* argv[], std::string& weightScheme, std::string& p
     }
     MODEL_STATE.doNOTATesting = std::atoi(argv[6]);
 
-    if (argc == 11) {
+    if (argc == 12) {
         sigmoidFitsFilename = argv[7];
         NOTAPointsFilename = argv[8];
 
@@ -259,7 +235,7 @@ void runFull(int argc, char* argv[]) {
     bool applyFeatureWeighting;
     int numNeighborsChecked, minSameClassCount;
 
-    parseArgs(argc, argv, weightScheme, pValueThreshold, applyFeatureWeighting, numNeighborsChecked, minSameClassCount,
+    parseFullArgs(argc, argv, weightScheme, pValueThreshold, applyFeatureWeighting, numNeighborsChecked, minSameClassCount,
         sigmoidFitsFilename, NOTAPointsFilename, datasetFilename, cacheDirectory);
 
     createFolder(cacheDirectory.c_str());
@@ -343,4 +319,114 @@ void runFull(int argc, char* argv[]) {
 
         MODEL_STATE.clearTemporaries();
     }
+}
+
+void parseProductionArgs(char* argv[], std::string& pValueThreshold, bool& applyFeatureWeighting,
+    int& numNeighborsChecked, int& minSameClassCount, std::string& sigmoidFitsFilename,
+    std::string& datasetFilename, std::string& testSetFilename, std::string& cacheDirectory) {
+    MODEL_STATE.doNOTATesting = false;
+    pValueThreshold = argv[1];
+
+    if (!(std::strcmp(argv[2], "0") == 0) && !(std::strcmp(argv[2], "1") == 0)) {
+        std::cerr << "Invalid Argument: featureWeighting must be one of {0, 1}" << std::endl;
+        std::exit(0);
+    }
+    applyFeatureWeighting = std::atoi(argv[2]);
+
+    if (!isDigit(argv[3])) {
+        std::cerr << "Invalid Argument: neighborsChecked must be a non negative integer" << std::endl;
+        std::exit(0);
+    }
+    numNeighborsChecked = std::atoi(argv[3]);
+
+    if (!isDigit(argv[4])) {
+        std::cerr << "Invalid Argument: minSameClass must be a non negative integer" << std::endl;
+        std::exit(0);
+    }
+    minSameClassCount = std::atoi(argv[4]);
+    if (minSameClassCount > numNeighborsChecked) {
+        std::cerr << "Invalid Argument: minSameClass must be less than or equal to neighborsChecked" << std::endl;
+        std::exit(0);
+    }
+
+    sigmoidFitsFilename = argv[5];
+    if (sigmoidFitsFilename != "" && !fileExists(sigmoidFitsFilename)) {
+        std::cerr << "Invalid Argument: sigmoidFitsFilepath \"" << sigmoidFitsFilename << "\" does not exist" << std::endl;
+        std::exit(0);
+    }
+
+    datasetFilename = argv[6];
+    if (!fileExists(datasetFilename)) {
+        std::cerr << "Invalid Argument: datasetFilepath \"" << datasetFilename << "\" does not exist" << std::endl;
+        std::exit(0);
+    }
+
+    testSetFilename = argv[7];
+    if (!fileExists(testSetFilename)) {
+        std::cerr << "Invalid Argument: testSetFilepath \"" << testSetFilename << "\" does not exist" << std::endl;
+        std::exit(0);
+    }
+
+    cacheDirectory = argv[8];
+}
+
+void runProduction(char* argv[]) {
+    std::string pValueThreshold, sigmoidFitsFilename, datasetFilename, testSetFilename, cacheDirectory;
+    bool applyFeatureWeighting;
+    int numNeighborsChecked, minSameClassCount;
+
+    parseProductionArgs(argv, pValueThreshold, applyFeatureWeighting, numNeighborsChecked, minSameClassCount,
+        sigmoidFitsFilename, datasetFilename, testSetFilename, cacheDirectory);
+
+    createFolder(cacheDirectory.c_str());
+
+    std::unordered_map<std::string, std::vector<ClassMember> > dataset = readFormattedDataset(datasetFilename);    
+
+    // Set state of training data
+    for (const auto& pair : dataset) {
+        MODEL_STATE.classNames.push_back(pair.first);
+        MODEL_STATE.numInstancesPerClass[pair.first] = pair.second.size();
+    }
+    std::sort(MODEL_STATE.classNames.begin(), MODEL_STATE.classNames.end());
+
+    CACHE_PATHS.initPaths(cacheDirectory);
+    setThreads();
+
+    // Set what type of processing will occur
+    if (applyFeatureWeighting) {
+        MODEL_STATE.processType = "featureWeighting";
+    }
+    else {
+        MODEL_STATE.processType = "default";
+    }
+
+    MODEL_STATE.setDatasetSize();
+    setPValueThreshold(pValueThreshold);
+    MODEL_STATE.preexistingBestfit = fileExists(sigmoidFitsFilename);
+
+    if (MODEL_STATE.preexistingBestfit) {
+        setSigmoidFitsFromFile(sigmoidFitsFilename);
+    }
+
+    std::cout << "Original training dataset sizes:\n";
+    int totalDatasetPoints = 0;
+    for (const auto& pair : dataset) {
+        std::cout << "Class " << pair.first << ": " << pair.second.size() << " instances\n";
+        totalDatasetPoints += pair.second.size();
+    }
+    std::cout << "Total in dataset: " << totalDatasetPoints << "\n";
+
+    std::unordered_map<std::string, std::vector<double> > sorted_distances = process(dataset,
+        numNeighborsChecked, minSameClassCount, 0);
+
+    // Print out difference in dataset sizes between the original and filtered training dataset
+    std::cout << "\nFiltered training dataset sizes:\n";
+    int totalFilteredPoints = 0;
+    for (const auto& pair : MODEL_STATE.classMap) {
+        std::cout << "Class " << pair.first << ": " << pair.second.size() << " instances\n";
+        totalFilteredPoints += pair.second.size();
+    }
+    std::cout << "Total in filteredDataset: " << totalFilteredPoints << "\n\n";
+
+    testProduction(testSetFilename);
 }

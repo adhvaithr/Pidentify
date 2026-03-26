@@ -473,11 +473,6 @@ void weightFeatures(const std::unordered_map<std::string, std::vector<ClassMembe
             [&className](double outsideMeanDistance, double withinMeanDistance) {
                 if (withinMeanDistance == 0) {
                     withinMeanDistance = 1.0 / MODEL_STATE.numInstancesPerClass.at(className);
-                    /*
-                    size_t totalDatasetSize = std::accumulate(MODEL_STATE.numInstancesPerClass.begin(), MODEL_STATE.numInstancesPerClass.end(), 0,
-                        [](size_t a, const std::pair<std::string, double>& b) {return a + b.second; });
-                    withinMeanDistance = 1.0 / totalDatasetSize;
-                    */
                 }
                 return std::max((outsideMeanDistance / withinMeanDistance) - 1.0, 0.0);
             }
