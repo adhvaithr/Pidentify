@@ -100,7 +100,7 @@ void setPValueThreshold(const std::string& threshold) {
 	if (threshold == "default") {
 		TEST_RESULTS.pvalueThreshold = 1.0 / MODEL_STATE.datasetSize;
 	}
-	else if (threshold == "geometric mean") {		
+	else if (threshold == "geometric mean") {
 		double total = std::accumulate(MODEL_STATE.numInstancesPerClass.begin(), MODEL_STATE.numInstancesPerClass.end(),
 			1.0, [](double a, const std::pair<std::string, double>& b) { return a * (1.0 / b.second); });
 		TEST_RESULTS.pvalueThreshold = std::pow(total, 1.0 / MODEL_STATE.numInstancesPerClass.size());
@@ -116,7 +116,8 @@ void setPValueThreshold(const std::string& threshold) {
 				std::cerr << errorMsg << std::endl;
 				std::exit(0);
 			}
-		} catch (const std::exception&) {
+		}
+		catch (const std::exception&) {
 			std::cerr << errorMsg << std::endl;
 			std::exit(0);
 		}
@@ -243,56 +244,7 @@ std::vector<std::unordered_map<std::string, double> > calculatePValues(
 	size_t total = nnDistances.size();
 	size_t datapointsPerThread = std::round(total / NUM_THREADS);
 	std::vector<std::thread> threads;
-	std::vector<std::unordered_map<std::string, double> > pvalues(total);	
-
-	for (size_t i = 0; i < NUM_THREADS && stop != total; ++i) {
-		if (i == NUM_THREADS - 1) {
-			stop = total;
-		}
-		else {
-			stop = std::min(total, stop + datapointsPerThread);
-		}
-
-		threads.emplace_back(std::thread{ calculatePValuesInRange, std::cref(nnDistances), std::ref(pvalues), start, stop });
-
-		start = stop;
-	}
-
-	for (auto& t : threads) {
-		t.join();
-	}
-
-	return pvalues;
-}
-
-std::vector<std::unordered_map<std::string, double> > calculatePValues(
-	const std::vector<std::unordered_map<std::string, double> >& nnDistances) {
-	size_t start = 0, stop = 0;
-	size_t total = nnDistances.size();
-	size_t datapointsPerThread = std::round(total / NUM_THREADS);
-	std::vector<std::thread> threads;
-	std::vector<std::unordered_map<std::string, double> > pvalues(total);	
-
-	for (size_t i = 0; i < NUM_THREADS && stop != total; ++i) {
-		if (i == NUM_THREADS - 1) {
-			stop = total;
-		}
-		else {
-			stop = std::min(total, stop + datapointsPerThread);
-		}
-
-		threads.emplace_back(std::thread{ calculatePValuesInRange, std::cref(nnDistances), std::ref(pvalues), start, stop });
-
-		start = stop;
-	}
-
-std::vector<std::unordered_map<std::string, double> > calculatePValues(
-	const std::vector<std::unordered_map<std::string, double> >& nnDistances) {
-	size_t start = 0, stop = 0;
-	size_t total = nnDistances.size();
-	size_t datapointsPerThread = std::round(total / NUM_THREADS);
-	std::vector<std::thread> threads;
-	std::vector<std::unordered_map<std::string, double> > pvalues(total);	
+	std::vector<std::unordered_map<std::string, double> > pvalues(total);
 
 	for (size_t i = 0; i < NUM_THREADS && stop != total; ++i) {
 		if (i == NUM_THREADS - 1) {
@@ -320,7 +272,7 @@ void printPValues(const std::vector<ClassMember>& dataset, const std::vector<std
 	if (printHeader) {
 		std::cout << "P values for test set:\n";
 	}
-	
+
 	for (size_t i = 0; i < dataset.size(); ++i) {
 		// Print out the feature values for the datapoint
 		std::cout << "Feature values: ";
@@ -365,14 +317,7 @@ void incrementAllConfusionMatrices(const std::string& className, size_t pvalCat,
 	for (size_t i = 0; i < NUM_NN_STEPS; ++i) {
 		++TEST_RESULTS.voidConfusionMatrix[pvalCat][i][className][idx];
 	}
-	std::cout << "NOTA Points: ";
-	for (size_t i = 1; i < 5; ++i) std::cout << TEST_RESULTS.voidRandomPoints[5][i] << ", ";
-	std::cout << std::endl;
-	
-
-	return classifications;
 }
-*/
 
 std::vector<std::pair<std::string, std::string> > calculateStatistics(const std::vector<ClassMember>& dataset,
 	const std::vector<std::unordered_map<std::string, double> >& pvalues) {
@@ -533,7 +478,6 @@ void printPredCategories(double* overallPredStats) {
 	std::cout << "None of the above: " << overallPredStats[2] << "%\n\n";
 	std::cout << std::setprecision(defaultPrecision);
 	std::cout.unsetf(std::ios::fixed);
-    std::cout << "==========================" << std::endl;
 }
 
 void printConfusionMatrix(double confusionMatrix[]) {
@@ -680,7 +624,7 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 
 	writeToCSV(header, rows, "iter" + std::to_string(fold) + "-test-datapoints.csv");
 	// Ending of saving test datapoints before NOTA added and standardization
-	*/	
+	*/
 
 	std::vector<ClassMember> standardizedDataset = standardize(dataset);
 
@@ -732,7 +676,7 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 	for (auto& t : threads) {
 		t.join();
 	}
-	
+
 	// Calculate the p value for each class
 	std::vector<std::unordered_map<std::string, double> > pvalues(nnDistances.size());
 	start = 0; stop = 0;
@@ -753,7 +697,7 @@ void test(std::vector<ClassMember>& dataset, size_t fold) {
 	for (auto& t : threads) {
 		t.join();
 	}
-	
+
 	if (!MODEL_STATE.preexistingBestfit) {
 		writeBestFitFunctionsToCSV(CACHE_PATHS.bestFitFunctionsByFoldFilepath, fold);
 	}
@@ -794,9 +738,9 @@ void test(const std::vector<ClassMember>& dataset,
 void test(const std::vector<ClassMember>& dataset, const std::vector<std::unordered_map<std::string, double> >& pvalues,
 	const std::vector<std::unordered_map<std::string, double> >& nnDistances, size_t fold) {
 	std::vector<std::pair<std::string, std::string> > classifications = calculateStatistics(dataset, pvalues);
-	
+
 	cacheTestPlotInfo(classifications, nnDistances, fold);
-	
+
 	if (fold == K_FOLDS - 1) {
 		calculateSummary();
 		printSummary();
