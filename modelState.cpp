@@ -33,8 +33,8 @@ void ModelState::clearTemporaries() {
 	zeroStdDeviation.clear();
 	classMap.clear();
 	if (!preexistingBestfit) {
-	bestFit.clear();
-}
+		bestFit.clear();
+	}
 }
 
 // Initialize number of threads to use concurrently

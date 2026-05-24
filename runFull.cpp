@@ -310,9 +310,9 @@ void runFull(int argc, char* argv[]) {
         std::cout << "Total in filteredDataset: " << totalFilteredPoints << "\n\n";
 
         if (!MODEL_STATE.preexistingBestfit) {
-        fitClasses(sorted_distances, fold);
+            fitClasses(sorted_distances, fold);
         }
-        
+
         std::vector<ClassMember> testDataset = createTestSet(kSets, NOTAPoints, fold);
 
         test(testDataset, fold);

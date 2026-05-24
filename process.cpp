@@ -289,26 +289,6 @@ std::unordered_map<std::string, std::vector<std::vector<double> > > filterDatapo
         std::cout << "Classes have been removed from training set\n";
     }
 
-    // Drop classes that don't have enough points after filtering
-    std::vector<std::string> droppedClasses;
-    for (const std::string& className : MODEL_STATE.classNames) {
-        if (filteredDataset.find(className) == filteredDataset.end()) {
-            droppedClasses.push_back(className);
-        }
-        else if (filteredDataset[className].size() < MIN_CLASS_MEMBERS) {
-            droppedClasses.push_back(className);
-            filteredDataset.erase(className);
-        }
-    }
-    if (!droppedClasses.empty()) {
-        std::cout << "Warning: Filtering of datapoints in the training set by l="
-            << l << " and k=" << k << " results in an insufficient number of remaining "
-            "points for classes: ";
-        std::copy(droppedClasses.begin(), droppedClasses.end(), std::ostream_iterator<std::string>(std::cout, ", "));
-        std::cout << std::endl;
-        std::cout << "Classes have been removed from training set\n";
-    }
-
     // Check if there are only 0 or 1 classes remaining after filtering
     if (filteredDataset.size() <= 1) {
         std::cout << "Filtering of datapoints with l=" << l << " and k=" << k
@@ -680,35 +660,6 @@ std::unordered_map<std::string, std::vector<double> > process(std::unordered_map
    }
 
    std::vector<std::string> warningClasses;
-
-   /*
-   // sort distances in ascending order
-   for (auto iter = classNNDistMap.begin(); iter != classNNDistMap.end();) {
-       std::sort(iter->second.begin(), iter->second.end());
-
-       // eliminate duplicated results
-       iter->second.erase(unique(iter->second.begin(), iter->second.end()), iter->second.end());
-
-       if (iter->second.size() < MIN_CLASS_MEMBERS) {
-           std::cout << "Warning: Class \"" << iter->first << "\" has an insufficient amount "
-               "of unique points for its ECDF\n";
-           MODEL_STATE.classMap.erase(iter->first);
-           iter = classNNDistMap.erase(iter);
-           continue;
-       }
-
-       if (iter->second[0] == 0.0) {
-           std::cout << "Duplicate datapoints in training set\n";
-           std::exit(0);
-       }
-
-       if (iter->second[0] > 1.0) {
-           warningClasses.push_back(iter->first);
-       }
-
-       ++iter;
-   }
-   */
 
    // sort distances in ascending order
    for (auto iter = classNNDistMap.begin(); iter != classNNDistMap.end();) {
