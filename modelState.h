@@ -27,6 +27,7 @@ struct ModelState {
 	std::vector<double> featureMins;
 	std::vector<double> featureMaxs;
 	double weightExp;
+	bool doNOTATesting;
 
 	void setDatasetSize();
 	void setWeightExp(const std::string& weightScheme);

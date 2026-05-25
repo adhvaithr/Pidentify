@@ -36,7 +36,7 @@ void writeBestFitFunctionsToCSV(const std::string& filename, int fold) {
 }
 
 void writePValuesToCSV(const std::vector<ClassMember>& dataset,
-	const std::vector<std::unordered_map<std::string, double> >& pvalues, size_t fold) {
+	const std::vector<std::unordered_map<std::string, double> >& pvalues, size_t fold, bool isProduction) {
 	FILE* fp;
 	char delim;
 	size_t totalDatapoints = pvalues.size();
@@ -45,7 +45,13 @@ void writePValuesToCSV(const std::vector<ClassMember>& dataset,
 	// Create a header if this is the first time writing to the CSV file
 	if (fold == 0) {
 		fp = fopen(CACHE_PATHS.pvaluesFilepath.c_str(), "w");
-		fprintf(fp, "lineNumber,fold,");
+		if (isProduction) {
+			fprintf(fp, "lineNumber");
+		}
+		else {
+			fprintf(fp, "lineNumber,fold,");
+		}
+		
 		for (size_t i = 0; i < totalClasses; ++i) {
 			delim = (i == totalClasses - 1) ? '\n' : ',';
 			fprintf(fp, "%s%c", MODEL_STATE.classNames[i].c_str(), delim);
@@ -56,7 +62,13 @@ void writePValuesToCSV(const std::vector<ClassMember>& dataset,
 	}
 
 	for (size_t i = 0; i < totalDatapoints; ++i) {
-		fprintf(fp, "%lu,%lu,", dataset[i].lineNumber, fold);
+		if (isProduction) {
+			fprintf(fp, "%lu,", dataset[i].lineNumber);
+		}
+		else {
+			fprintf(fp, "%lu,%lu,", dataset[i].lineNumber, fold);
+		}
+		
 		for (size_t j = 0; j < totalClasses; ++j) {
 			delim = (j == totalClasses - 1) ? '\n' : ',';
 			std::string className = MODEL_STATE.classNames[j];
