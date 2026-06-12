@@ -49,10 +49,12 @@ class DataFile:
         num_cols = sorted(list(set(range(len(df.columns))) - set(self.ignore_cols) - \
                           set([self.class_col_index] if self.class_col_index != -1 else [])))
         DataFile._drop_non_num(num_cols, df)
-        df.dropna(subset = [df.columns[col_idx] for col_idx in num_cols], inplace=True)
+        if not self.keep_na:
+            df.dropna(subset = [df.columns[col_idx] for col_idx in num_cols], inplace=True)
         #df.drop_duplicates(inplace = True)
         df = self._reorder_columns(num_cols, df)
-        df.drop_duplicates(subset=list(takewhile(lambda col: not col.startswith("nonNum"), df.columns)), inplace=True)
+        if self.drop_duplicates:
+            df.drop_duplicates(subset=list(takewhile(lambda col: not col.startswith("nonNum"), df.columns)), inplace=True)
         return df
 
 
