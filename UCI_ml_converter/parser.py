@@ -40,13 +40,26 @@ class Parser:
 
             extensions = list(map(self._get_file_extension, input_files))
 
-            datafile_list = [DataFile(file_path=input_files[i], file_type=extensions[i], class_col_index=class_col,
-                                      ignore_cols=ignore_cols[:], drop_cols = optional_params["drop_columns"][:], ignore_rows=optional_params["ignore_rows"],
-                                      drop_footer=optional_params["drop_footer"], include_header=include_header if i == 0 else False,
-                                      class_drop_chars=optional_params["cls_drop"], custom_class=optional_params["custom_cls"][:],
-                                      merge_class=optional_params["merge_cls"][:], combine_rows=optional_params["combine_rows"],
-                                      infer_non_num=optional_params["infer_non_num"])
-                             for i in range(len(input_files))]
+           datafile_list = [
+                DataFile(
+                    file_path=input_files[i],
+                    file_type=extensions[i],
+                    class_col_index=class_col,
+                    ignore_cols=ignore_cols[:],
+                    drop_cols=optional_params["drop_columns"][:],
+                    ignore_rows=optional_params["ignore_rows"],
+                    drop_footer=optional_params["drop_footer"],
+                    include_header=include_header if i == 0 else False,
+                    class_drop_chars=optional_params["cls_drop"],
+                    custom_class=optional_params["custom_cls"][:],
+                    merge_class=optional_params["merge_cls"][:],
+                    combine_rows=optional_params["combine_rows"],
+                    infer_non_num=optional_params["infer_non_num"],
+                    keep_na=optional_params["keep_na"],
+                    drop_duplicates=optional_params["drop_duplicates"]
+                )
+                for i in range(len(input_files))
+            ]
             
             for file_path, merge_paths in merge_files.items():
                 for i in range(len(merge_paths)):
@@ -123,13 +136,28 @@ class Parser:
         Parse arguments for the following optional flags: -d, -db, -cls, -clsd, --delay_write,
         --drop_col, --merge_cls, --combine_rows, --infer_nn.
         """
-        flags = ["-d", "-db", "-cls", "-clsd", "--delay_write", "--drop_col", "--merge_cls", "--combine_rows",
-                 "--infer_nn"]
-        optional_params = {"ignore_rows": 0, "drop_footer": 0, "cls_drop": False, "custom_cls": [],
-                           "delay_write": False, "drop_columns": [], "merge_cls": [], "combine_rows": False,
-                           "infer_non_num": False}
+        flags = [
+            "-d", "-db", "-cls", "-clsd",
+            "--delay_write", "--drop_col", "--merge_cls",
+            "--combine_rows", "--infer_nn",
+            "--keepna", "--drop_duplicates"
+        ]
+        
+        optional_params = {
+            "ignore_rows": 0,
+            "drop_footer": 0,
+            "cls_drop": False,
+            "custom_cls": [],
+            "delay_write": False,
+            "drop_columns": [],
+            "merge_cls": [],
+            "combine_rows": False,
+            "infer_non_num": False,
+            "keep_na": False,
+            "drop_duplicates": False
+        }
         i = 0
-        while user_input[i] in flags:
+        while i < len(user_input) and user_input[i] in flags:
             if user_input[i] == "-d":
                 optional_params["ignore_rows"] = int(user_input[i + 1])
                 increment = 2
@@ -157,6 +185,12 @@ class Parser:
                 increment = 1
             elif user_input[i] == "--infer_nn":
                 optional_params["infer_non_num"] = True
+                increment = 1
+            elif user_input[i] == "--keepna":
+                optional_params["keep_na"] = True
+                increment = 1
+            elif user_input[i] == "--drop_duplicates":
+                optional_params["drop_duplicates"] = True
                 increment = 1
             i += increment
     
