@@ -40,7 +40,7 @@ class Parser:
 
             extensions = list(map(self._get_file_extension, input_files))
 
-           datafile_list = [
+            datafile_list = [
                 DataFile(
                     file_path=input_files[i],
                     file_type=extensions[i],
