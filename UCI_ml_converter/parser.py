@@ -63,7 +63,19 @@ class Parser:
             
             for file_path, merge_paths in merge_files.items():
                 for i in range(len(merge_paths)):
-                    merge_files[file_path][i] = DataFile(merge_paths[i], *[None] * 10)
+                    merge_files[file_path][i] = DataFile(
+                        file_path=merge_paths[i],
+                        file_type=self._get_file_extension(merge_paths[i]),
+                        class_col_index=-1,
+                        ignore_cols=[],
+                        drop_cols=[],
+                        ignore_rows=0,
+                        drop_footer=0,
+                        include_header=False,
+                        class_drop_chars=False,
+                        custom_class=[],
+                        merge_class=[],
+                    )
 
             return datafile_list, merge_files, merge_on_keys, optional_params["delay_write"]
         except IndexError:
@@ -200,7 +212,7 @@ class Parser:
     def _print_help(self) -> None:
         help_format = "\t{:<25}{}"
         print("python UCI_ml_converter.py [-H] include_header class_col ignore_cols [-d rows] [-db rows] [-cls custom_class] "\
-              "[-clsd drop_chars] [--delay_write] [--drop_col cols] [--merge_cls cols] [--infer_nn] "\
+              "[-clsd drop_chars] [--delay_write] [--drop_col cols] [--merge_cls cols] [--infer_nn] [--keepna] [--drop_duplicates] "\
               "input_file(s)/folder(s) [--merge file(s)] [-rm file(s)]")
         command_line_format = {"-H": "Optional. Prints the usage statement. All other arguments are ignored.",
                                "include_header": "Integer. If 1, add header if not already in dataset. If 0, drop header if dataset has one.",
@@ -223,6 +235,8 @@ class Parser:
                                "--merge file(s)": "Optional. File/folder paths. Concatenate file column to the end of the last input file.",
                                "--merge_on cols file(s)": "Optional. Inner join dataset(s) based on a list of column names separated by comma.",
                                "-rm file(s)": "Optional. File paths or *filename. Drop files that match the provided file path or all files that match "\
-                                              "the filename."}
+                                              "the filename.",
+                              "--keepna": "Optional. Keep rows with NA/null values instead of dropping rows with NA in numerical columns.",
+                                "--drop_duplicates": "Optional. Drop exact duplicate rows. By default, duplicates are preserved."}
         for command, description in command_line_format.items():
             print(help_format.format(command, description))
