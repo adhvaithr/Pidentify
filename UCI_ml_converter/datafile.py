@@ -25,6 +25,8 @@ class DataFile:
     merge_class: list[int]
     combine_rows: bool = False
     infer_non_num: bool = False
+    keep_na: bool = False
+    drop_duplicates: bool = False
     delimiter: str = None
 
 
