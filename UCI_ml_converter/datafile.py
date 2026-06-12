@@ -54,7 +54,7 @@ class DataFile:
         #df.drop_duplicates(inplace = True)
         df = self._reorder_columns(num_cols, df)
         if self.drop_duplicates:
-            df.drop_duplicates(subset=list(takewhile(lambda col: not col.startswith("nonNum"), df.columns)), inplace=True)
+            df.drop_duplicates(inplace=True)
         return df
 
 
