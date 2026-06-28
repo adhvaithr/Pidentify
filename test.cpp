@@ -95,9 +95,9 @@ std::unordered_map<std::string, double[PVALUE_NUMERATOR_MAX] > createPerClassPVa
 
 void setPValueThreshold(const std::string& threshold) {
 	std::string errorMsg = "Invalid argument: pvalueThreshold must be a decimal number in the range [0, 1) or one of "
-		"{\"default\", \"geometric mean\", \"per class\"}";
+		"{\"total dataset\", \"geometric mean\", \"per class\"}";
 
-	if (threshold == "default") {
+	if (threshold == "total dataset") {
 		TEST_RESULTS.pvalueThreshold = 1.0 / MODEL_STATE.datasetSize;
 	}
 	else if (threshold == "geometric mean") {
@@ -571,6 +571,10 @@ void printSummary() {
 		}
 		else {
 			printSummaryWithoutNOTA(pvalCat);
+		}
+		
+		if (TEST_RESULTS.pvalueThreshold >= 0) {
+			break;
 		}
 	}
 }

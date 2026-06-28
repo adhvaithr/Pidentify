@@ -141,6 +141,10 @@ void writeNOTACategoryResultsToCSV() {
 			}
 			fprintf(fp, "%.2f\n", TEST_RESULTS.hyperspaceRandomPoints[pvalCat][NOTALoc][5]);
 		}
+
+		if (TEST_RESULTS.pvalueThreshold >= 0) {
+			break;
+		}
 	}
 
 	fclose(fp);
