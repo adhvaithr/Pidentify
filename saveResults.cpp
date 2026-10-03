@@ -46,7 +46,7 @@ void writePValuesToCSV(const std::vector<ClassMember>& dataset,
 	if (fold == 0) {
 		fp = fopen(CACHE_PATHS.pvaluesFilepath.c_str(), "w");
 		if (isProduction) {
-			fprintf(fp, "lineNumber");
+			fprintf(fp, "lineNumber,");
 		}
 		else {
 			fprintf(fp, "lineNumber,fold,");
