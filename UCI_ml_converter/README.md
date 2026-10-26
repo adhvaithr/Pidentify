@@ -36,3 +36,8 @@ python UCI_ml_converter.py [-H] include_header class_col ignore_cols \
   [--delay_write] [--drop_col cols] [--merge_cls cols] \
   [--combine_rows] [--infer_nn] \
   input_file(s)/folder(s) [--merge file(s)] [--merge_on cols file(s)] [-rm file(s)]
+```
+
+## Data Availability
+
+The 139 datasets we processed can be accessed at https://www.ics.uci.edu/~wayne/UCI-ML-Repo-Standardized.7z.
